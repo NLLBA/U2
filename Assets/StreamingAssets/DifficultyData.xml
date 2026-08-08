@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DifficultyData>
+  <difficultyInfos>
+    <DifficultyInfo id="1" name="简单" hpAdd="2" bulletSpeedMul="0.75" fireCdMul="1.35" fireDelayMul="1.25" shieldTime="4" skillCD="8"/>
+    <DifficultyInfo id="2" name="普通" hpAdd="0" bulletSpeedMul="1" fireCdMul="1" fireDelayMul="1" shieldTime="3" skillCD="10"/>
+    <DifficultyInfo id="3" name="困难" hpAdd="-1" bulletSpeedMul="1.25" fireCdMul="0.75" fireDelayMul="0.8" shieldTime="2" skillCD="13"/>
+  </difficultyInfos>
+</DifficultyData>

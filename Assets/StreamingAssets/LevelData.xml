@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LevelData>
+  <levelInfos>
+    <LevelInfo id="1" name="第一关-训练航线" beginTime="0" bulletSpeedMul="1" fireCdMul="1" fireDelayMul="1" fireIds="1,2"/>
+    <LevelInfo id="2" name="第二关-密集弹幕" beginTime="30" bulletSpeedMul="1.15" fireCdMul="0.85" fireDelayMul="0.9" fireIds="1,2,3"/>
+    <LevelInfo id="3" name="第三关-追踪压制" beginTime="60" bulletSpeedMul="1.35" fireCdMul="0.7" fireDelayMul="0.75" fireIds="2,3,4"/>
+    <LevelInfo id="4" name="第四关-极限挑战" beginTime="100" bulletSpeedMul="1.6" fireCdMul="0.55" fireDelayMul="0.6" fireIds="1,2,3,4"/>
+  </levelInfos>
+</LevelData>
