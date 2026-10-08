@@ -253,7 +253,7 @@ Transform:
   m_GameObject: {fileID: 41707979}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -55, y: -95, z: 0}
+  m_LocalPosition: {x: -11, y: -95, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -5914,11 +5914,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   uiCamera: {fileID: 1295655507}
-  referenceWidth: 1920
-  referenceHeight: 1080
-  referenceVerticalFieldOfView: 75.29524
-  referenceOrthographicSize: 1
-  respectScreenSafeArea: 1
+  refWidth: 1920
+  refHeight: 1080
+  refFov: 75.29524
+  refSize: 1
+  useSafeArea: 1
 --- !u!1 &729503909
 GameObject:
   m_ObjectHideFlags: 0
@@ -6073,7 +6073,7 @@ MonoBehaviour:
   - {fileID: 89009535}
   - {fileID: 608121831}
   uis: {fileID: 1295655507}
-  heroNameLabel: {fileID: 46675280}
+  labHero: {fileID: 46675280}
 --- !u!1 &730852770
 GameObject:
   m_ObjectHideFlags: 0
@@ -7598,7 +7598,7 @@ Transform:
   m_GameObject: {fileID: 952408028}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -55, y: 65.00001, z: 0}
+  m_LocalPosition: {x: -11, y: 65.00001, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:

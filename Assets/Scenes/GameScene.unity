@@ -632,7 +632,7 @@ MonoBehaviour:
   labDifficulty: {fileID: 942823656}
   labSkill: {fileID: 1807832741}
   labShieldIcon: {fileID: 910163044}
-  labHeroSkillIcon: {fileID: 295244875}
+  labSkillIcon: {fileID: 295244875}
   labBossWarning: {fileID: 959424143}
   hpObjs:
   - {fileID: 849289979}
@@ -5172,11 +5172,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   uiCamera: {fileID: 2047845493}
-  referenceWidth: 1920
-  referenceHeight: 1080
-  referenceVerticalFieldOfView: 60
-  referenceOrthographicSize: 1
-  respectScreenSafeArea: 1
+  refWidth: 1920
+  refHeight: 1080
+  refFov: 60
+  refSize: 1
+  useSafeArea: 1
 --- !u!1 &1279997156
 GameObject:
   m_ObjectHideFlags: 0
@@ -6849,7 +6849,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1619050419}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1b3dc54f924693f41b5cbecb267e647a, type: 3}
   m_Name: 

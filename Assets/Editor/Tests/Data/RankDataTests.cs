@@ -18,35 +18,35 @@ public class RankDataTests
         }
 
         Assert.IsNotNull(data);
-        data.NormalizeAndSort();
-        Assert.AreEqual(1, data.rankInfos.Count);
+        data.Sort();
+        Assert.AreEqual(1, data.ranks.Count);
 
-        RankInfo info = data.rankInfos[0];
+        RankInfo info = data.ranks[0];
         Assert.AreEqual("OldPlayer", info.name);
-        Assert.AreEqual(0, info.finalScore);
-        Assert.AreEqual(88, info.survivalTime);
+        Assert.AreEqual(0, info.score);
+        Assert.AreEqual(88, info.runTime);
         Assert.AreEqual(88, info.time);
         Assert.AreEqual("普通", info.difficulty);
-        Assert.AreEqual(0, info.bossRounds);
-        Assert.AreEqual(0, info.clearedBullets);
-        Assert.AreEqual(string.Empty, info.recordTime);
+        Assert.AreEqual(0, info.bosses);
+        Assert.AreEqual(0, info.clears);
+        Assert.AreEqual(string.Empty, info.date);
     }
 
     [Test]
     public void NewRankFieldsRoundTripThroughXml()
     {
         RankData source = new RankData();
-        source.rankInfos.Add(new RankInfo
+        source.ranks.Add(new RankInfo
         {
             name = "Pilot",
-            finalScore = 4321,
-            survivalTime = 156,
+            score = 4321,
+            runTime = 156,
             difficulty = "困难",
-            bossRounds = 2,
-            clearedBullets = 17,
-            recordTime = "2026-08-02 20:30:00",
+            bosses = 2,
+            clears = 17,
+            date = "2026-08-02 20:30:00",
         });
-        source.NormalizeAndSort();
+        source.Sort();
 
         XmlSerializer serializer = new XmlSerializer(typeof(RankData));
         string xml;
@@ -68,25 +68,25 @@ public class RankDataTests
         }
 
         Assert.IsNotNull(result);
-        result.NormalizeAndSort();
-        Assert.AreEqual(4321, result.rankInfos[0].finalScore);
-        Assert.AreEqual("困难", result.rankInfos[0].difficulty);
-        Assert.AreEqual("2026-08-02 20:30:00", result.rankInfos[0].recordTime);
+        result.Sort();
+        Assert.AreEqual(4321, result.ranks[0].score);
+        Assert.AreEqual("困难", result.ranks[0].difficulty);
+        Assert.AreEqual("2026-08-02 20:30:00", result.ranks[0].date);
     }
 
     [Test]
     public void RankingSortsByScoreThenSurvivalTime()
     {
         RankData data = new RankData();
-        data.rankInfos.Add(CreateRank("ShortTie", 100, 50));
-        data.rankInfos.Add(CreateRank("Winner", 200, 10));
-        data.rankInfos.Add(CreateRank("LongTie", 100, 70));
+        data.ranks.Add(CreateRank("ShortTie", 100, 50));
+        data.ranks.Add(CreateRank("Winner", 200, 10));
+        data.ranks.Add(CreateRank("LongTie", 100, 70));
 
-        data.NormalizeAndSort();
+        data.Sort();
 
-        Assert.AreEqual("Winner", data.rankInfos[0].name);
-        Assert.AreEqual("LongTie", data.rankInfos[1].name);
-        Assert.AreEqual("ShortTie", data.rankInfos[2].name);
+        Assert.AreEqual("Winner", data.ranks[0].name);
+        Assert.AreEqual("LongTie", data.ranks[1].name);
+        Assert.AreEqual("ShortTie", data.ranks[2].name);
     }
 
     [Test]
@@ -95,23 +95,48 @@ public class RankDataTests
         RankData data = new RankData();
         for (int i = 0; i < 25; i++)
         {
-            data.rankInfos.Add(CreateRank("Player" + i, i, i));
+            data.ranks.Add(CreateRank("Player" + i, i, i));
         }
 
-        data.NormalizeAndSort(20);
+        data.Sort(20);
 
-        Assert.AreEqual(20, data.rankInfos.Count);
-        Assert.AreEqual(24, data.rankInfos[0].finalScore);
-        Assert.AreEqual(5, data.rankInfos[19].finalScore);
+        Assert.AreEqual(20, data.ranks.Count);
+        Assert.AreEqual(24, data.ranks[0].score);
+        Assert.AreEqual(5, data.ranks[19].score);
     }
 
-    private static RankInfo CreateRank(string name, int score, int survivalTime)
+    [Test]
+    public void NormalizeTrimsPilotNameAndUsesDefaultForBlankInput()
+    {
+        RankInfo named = new RankInfo { name = "  Ace  " };
+        RankInfo blank = new RankInfo { name = " \t" };
+
+        named.Normalize();
+        blank.Normalize();
+
+        Assert.AreEqual("Ace", named.name);
+        Assert.AreEqual("Player", blank.name);
+    }
+
+    [Test]
+    public void SortNormalizesNamesLoadedFromLegacyXml()
+    {
+        RankData data = new RankData();
+        data.ranks.Add(new RankInfo { name = "  LegacyPilot  ", time = 12 });
+
+        data.Sort();
+
+        Assert.AreEqual("LegacyPilot", data.ranks[0].name);
+        Assert.AreEqual(12, data.ranks[0].runTime);
+    }
+
+    private static RankInfo CreateRank(string name, int score, int runTime)
     {
         return new RankInfo
         {
             name = name,
-            finalScore = score,
-            survivalTime = survivalTime,
+            score = score,
+            runTime = runTime,
             difficulty = "普通",
         };
     }

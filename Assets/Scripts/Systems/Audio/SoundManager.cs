@@ -23,17 +23,17 @@ public class SoundManager : MonoBehaviour
     public static SoundManager Instance => instance;
 
     private readonly Dictionary<SoundCue, AudioClip> clips = new Dictionary<SoundCue, AudioClip>();
-    private readonly HashSet<int> boundButtonIds = new HashSet<int>();
+    private readonly HashSet<int> buttonIds = new HashSet<int>();
 
-    private AudioSource audioSource;
+    private AudioSource source;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void Bootstrap()
     {
-        EnsureInstance();
+        Ensure();
     }
 
-    public static SoundManager EnsureInstance()
+    public static SoundManager Ensure()
     {
         if (instance != null)
             return instance;
@@ -47,7 +47,7 @@ public class SoundManager : MonoBehaviour
         if (!Application.isPlaying)
             return;
 
-        EnsureInstance().PlayInternal(cue);
+        Ensure().PlayClip(cue);
     }
 
     private void Awake()
@@ -61,24 +61,24 @@ public class SoundManager : MonoBehaviour
         instance = this;
         DontDestroyOnLoad(gameObject);
 
-        audioSource = gameObject.GetComponent<AudioSource>();
-        if (audioSource == null)
+        source = gameObject.GetComponent<AudioSource>();
+        if (source == null)
         {
-            audioSource = gameObject.AddComponent<AudioSource>();
+            source = gameObject.AddComponent<AudioSource>();
         }
 
-        audioSource.playOnAwake = false;
-        audioSource.loop = false;
-        audioSource.spatialBlend = 0f;
-        audioSource.ignoreListenerPause = true;
+        source.playOnAwake = false;
+        source.loop = false;
+        source.spatialBlend = 0f;
+        source.ignoreListenerPause = true;
 
-        CreateDefaultClips();
-        SceneManager.sceneLoaded += HandleSceneLoaded;
+        CreateClips();
+        SceneManager.sceneLoaded += OnSceneLoaded;
     }
 
     private void Start()
     {
-        StartCoroutine(BindButtonsAfterSceneLoad());
+        StartCoroutine(BindButtons());
     }
 
     private void OnDestroy()
@@ -86,17 +86,17 @@ public class SoundManager : MonoBehaviour
         if (instance != this)
             return;
 
-        SceneManager.sceneLoaded -= HandleSceneLoaded;
+        SceneManager.sceneLoaded -= OnSceneLoaded;
         instance = null;
     }
 
-    private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        boundButtonIds.Clear();
-        StartCoroutine(BindButtonsAfterSceneLoad());
+        buttonIds.Clear();
+        StartCoroutine(BindButtons());
     }
 
-    private IEnumerator BindButtonsAfterSceneLoad()
+    private IEnumerator BindButtons()
     {
         yield return null;
 
@@ -108,7 +108,7 @@ public class SoundManager : MonoBehaviour
                 continue;
 
             int id = button.GetInstanceID();
-            if (!boundButtonIds.Add(id))
+            if (!buttonIds.Add(id))
                 continue;
 
             button.onClick.Add(new EventDelegate(PlayUiClick));
@@ -117,61 +117,61 @@ public class SoundManager : MonoBehaviour
 
     private void PlayUiClick()
     {
-        PlayInternal(SoundCue.UiClick);
+        PlayClip(SoundCue.UiClick);
     }
 
-    private void PlayInternal(SoundCue cue)
+    private void PlayClip(SoundCue cue)
     {
         MusicData settings = GameDataMgr.Instance.musicData;
-        if (settings == null || !settings.SoundIsopen)
+        if (settings == null || !settings.soundOn)
             return;
 
         AudioClip clip;
         if (!clips.TryGetValue(cue, out clip) || clip == null)
             return;
 
-        audioSource.PlayOneShot(clip, Mathf.Clamp01(settings.soundValue));
+        source.PlayOneShot(clip, Mathf.Clamp01(settings.soundVolume));
     }
 
-    private void CreateDefaultClips()
+    private void CreateClips()
     {
-        clips[SoundCue.UiClick] = CreateTone("UI Click", 0.08f, 900f, 620f, 0.28f, 0.08f);
-        clips[SoundCue.PlayerHit] = CreateTone("Player Hit", 0.2f, 180f, 70f, 0.48f, 0.35f);
-        clips[SoundCue.Skill] = CreateTone("Skill", 0.3f, 420f, 1180f, 0.34f, 0.12f);
-        clips[SoundCue.BossWarning] = CreateTone("Boss Warning", 0.42f, 720f, 420f, 0.42f, 0.18f);
-        clips[SoundCue.BossAppear] = CreateTone("Boss Appear", 0.55f, 110f, 260f, 0.5f, 0.32f);
-        clips[SoundCue.BossCleared] = CreateTone("Boss Cleared", 0.45f, 420f, 980f, 0.4f, 0.08f);
-        clips[SoundCue.GameOver] = CreateTone("Game Over", 0.7f, 360f, 90f, 0.42f, 0.16f);
+        clips[SoundCue.UiClick] = NewTone("UI Click", 0.08f, 900f, 620f, 0.28f, 0.08f);
+        clips[SoundCue.PlayerHit] = NewTone("Player Hit", 0.2f, 180f, 70f, 0.48f, 0.35f);
+        clips[SoundCue.Skill] = NewTone("Skill", 0.3f, 420f, 1180f, 0.34f, 0.12f);
+        clips[SoundCue.BossWarning] = NewTone("Boss Warning", 0.42f, 720f, 420f, 0.42f, 0.18f);
+        clips[SoundCue.BossAppear] = NewTone("Boss Appear", 0.55f, 110f, 260f, 0.5f, 0.32f);
+        clips[SoundCue.BossCleared] = NewTone("Boss Cleared", 0.45f, 420f, 980f, 0.4f, 0.08f);
+        clips[SoundCue.GameOver] = NewTone("Game Over", 0.7f, 360f, 90f, 0.42f, 0.16f);
     }
 
-    private AudioClip CreateTone(string name, float duration, float startFrequency, float endFrequency,
-        float amplitude, float noiseAmount)
+    private AudioClip NewTone(string name, float duration, float startFreq, float endFreq,
+        float amplitude, float noiseMix)
     {
-        int sampleCount = Mathf.Max(1, Mathf.CeilToInt(duration * SampleRate));
-        float[] samples = new float[sampleCount];
+        int count = Mathf.Max(1, Mathf.CeilToInt(duration * SampleRate));
+        float[] samples = new float[count];
         float phase = 0f;
-        uint noiseState = 2463534242u;
+        uint noiseSeed = 2463534242u;
 
-        for (int i = 0; i < sampleCount; i++)
+        for (int i = 0; i < count; i++)
         {
-            float progress = (float)i / sampleCount;
-            float frequency = Mathf.Lerp(startFrequency, endFrequency, progress);
+            float progress = (float)i / count;
+            float frequency = Mathf.Lerp(startFreq, endFreq, progress);
             phase += Mathf.PI * 2f * frequency / SampleRate;
 
             float attack = Mathf.Clamp01(progress / 0.04f);
             float release = Mathf.Clamp01((1f - progress) / 0.25f);
             float envelope = attack * release;
 
-            noiseState ^= noiseState << 13;
-            noiseState ^= noiseState >> 17;
-            noiseState ^= noiseState << 5;
-            float noise = ((noiseState & 0xffffu) / 32767.5f) - 1f;
+            noiseSeed ^= noiseSeed << 13;
+            noiseSeed ^= noiseSeed >> 17;
+            noiseSeed ^= noiseSeed << 5;
+            float noise = ((noiseSeed & 0xffffu) / 32767.5f) - 1f;
 
             float harmonic = Mathf.Sin(phase) + Mathf.Sin(phase * 2f) * 0.22f;
-            samples[i] = (harmonic * (1f - noiseAmount) + noise * noiseAmount) * amplitude * envelope;
+            samples[i] = (harmonic * (1f - noiseMix) + noise * noiseMix) * amplitude * envelope;
         }
 
-        AudioClip clip = AudioClip.Create(name, sampleCount, 1, SampleRate, false);
+        AudioClip clip = AudioClip.Create(name, count, 1, SampleRate, false);
         clip.SetData(samples, 0);
         return clip;
     }

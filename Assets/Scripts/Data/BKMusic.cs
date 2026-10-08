@@ -1,5 +1,3 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 public class BKMusic : MonoBehaviour
@@ -8,28 +6,26 @@ public class BKMusic : MonoBehaviour
 
     public static BKMusic Instance => instance;
 
-    private AudioSource bkaudio;
-
-   private AudioClip clip;
+    private AudioSource source;
+    private AudioClip clip;
 
     private void Awake()
     {
         instance = this;
-        //»ñÈ¡ÒôĞ§×é¼ş
-        bkaudio = this.GetComponent<AudioSource>();
-        //±³¾°ÒôÀÖ³õÊ¼»¯
-        SetBKMusicIsOpen(GameDataMgr.Instance.musicData.musicIsopen);
-        SetMusicValue(GameDataMgr.Instance.musicData.musicvalue);
+        // è·å–éŸ³æ•ˆç»„ä»¶ã€‚
+        source = GetComponent<AudioSource>();
+        // åˆå§‹åŒ–èƒŒæ™¯éŸ³ä¹ã€‚
+        SetOpen(GameDataMgr.Instance.musicData.musicOn);
+        SetMusicVolume(GameDataMgr.Instance.musicData.musicVolume);
     }
 
-    public void SetBKMusicIsOpen(bool isOpen)
+    public void SetOpen(bool isOpen)
     {
-        bkaudio.mute = isOpen;
+        source.mute = isOpen;
     }
 
-    public void SetMusicValue(float value)
+    public void SetMusicVolume(float value)
     {
-        bkaudio.volume = value;
+        source.volume = value;
     }
-    
 }

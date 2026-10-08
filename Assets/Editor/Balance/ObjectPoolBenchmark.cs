@@ -27,7 +27,7 @@ public static class ObjectPoolBenchmark
         public int Gen0Collections;
         public int Gen1Collections;
         public int Gen2Collections;
-        public ObjectPoolStatistics Statistics;
+        public PoolStats Statistics;
     }
 
     [MenuItem("Tools/U2/Run Object Pool Benchmark")]
@@ -55,7 +55,7 @@ public static class ObjectPoolBenchmark
         {
             host = new GameObject("ObjectPoolBenchmarkHost");
             ObjectPoolManager pool = host.AddComponent<ObjectPoolManager>();
-            pool.maxInactivePerResource = 2500;
+            pool.poolLimit = 2500;
 
             prefab = new GameObject("ObjectPoolBenchmarkPrefab");
             prefab.SetActive(false);
@@ -64,10 +64,10 @@ public static class ObjectPoolBenchmark
             for (int i = 0; i < Counts.Length; i++)
             {
                 int count = Counts[i];
-                pool.ClearInactive();
+                pool.ClearPool();
                 results.Add(Measure(pool, prefab, count, false));
 
-                pool.ClearInactive();
+                pool.ClearPool();
                 WarmPool(pool, prefab, count);
                 results.Add(Measure(pool, prefab, count, true));
             }
@@ -91,7 +91,7 @@ public static class ObjectPoolBenchmark
 
     private static void WarmPool(ObjectPoolManager pool, GameObject prefab, int count)
     {
-        pool.poolingEnabled = true;
+        pool.usePool = true;
         List<GameObject> objects = SpawnMany(pool, prefab, count);
         ReleaseMany(pool, objects);
     }
@@ -100,10 +100,10 @@ public static class ObjectPoolBenchmark
         ObjectPoolManager pool,
         GameObject prefab,
         int count,
-        bool poolingEnabled)
+        bool usePool)
     {
-        pool.poolingEnabled = poolingEnabled;
-        pool.ResetStatistics();
+        pool.usePool = usePool;
+        pool.ResetStats();
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
@@ -123,7 +123,7 @@ public static class ObjectPoolBenchmark
         return new Result
         {
             Count = count,
-            Mode = poolingEnabled ? "pool" : "instantiate-destroy",
+            Mode = usePool ? "pool" : "instantiate-destroy",
             ElapsedMilliseconds = stopwatch.Elapsed.TotalMilliseconds,
             ManagedMemoryBefore = managedBefore,
             ManagedMemoryAtPeak = managedAtPeak,
@@ -136,7 +136,7 @@ public static class ObjectPoolBenchmark
             Gen0Collections = GC.CollectionCount(0) - gen0Before,
             Gen1Collections = GC.CollectionCount(1) - gen1Before,
             Gen2Collections = GC.CollectionCount(2) - gen2Before,
-            Statistics = pool.GetStatistics(),
+            Statistics = pool.Stats(),
         };
     }
 
@@ -183,7 +183,7 @@ public static class ObjectPoolBenchmark
         for (int i = 0; i < results.Count; i++)
         {
             Result result = results[i];
-            ObjectPoolStatistics stats = result.Statistics;
+            PoolStats stats = result.Statistics;
             csv.Append(result.Count).Append(',')
                 .Append(result.Mode).Append(',')
                 .Append(result.ElapsedMilliseconds.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
@@ -196,12 +196,12 @@ public static class ObjectPoolBenchmark
                 .Append(result.Gen0Collections).Append(',')
                 .Append(result.Gen1Collections).Append(',')
                 .Append(result.Gen2Collections).Append(',')
-                .Append(stats.SpawnRequests).Append(',')
-                .Append(stats.InstancesCreated).Append(',')
-                .Append(stats.InstancesReused).Append(',')
-                .Append(stats.RecycleRequests).Append(',')
+                .Append(stats.SpawnCount).Append(',')
+                .Append(stats.NewCount).Append(',')
+                .Append(stats.ReuseCount).Append(',')
+                .Append(stats.ReleaseCount).Append(',')
                 .Append(stats.InactiveCount).Append(',')
-                .Append(stats.DiscardedCount).AppendLine();
+                .Append(stats.DropCount).AppendLine();
         }
 
         File.WriteAllText(path, csv.ToString(), Encoding.UTF8);

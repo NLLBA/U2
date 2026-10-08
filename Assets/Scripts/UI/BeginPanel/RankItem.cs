@@ -1,5 +1,3 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 public class RankItem : MonoBehaviour
@@ -8,25 +6,59 @@ public class RankItem : MonoBehaviour
     public UILabel labName;
     public UILabel labTime;
 
-    public void InitInfo(int rank,string name,int time)
+    public void Init(int rank, RankInfo info)
     {
-        //排名
-        labRank.text = rank.ToString();
-        //名字
-        labName.text = name;
-        //时间
-        string str = "";
-        if (time/3600>0)
+        if (info == null)
         {
-            str += time / 3600 + "h";
+            Init(rank, "Player", 0);
+            return;
         }
-        if(time%3600/60>0||str!="")
+
+        info.Normalize();
+        SetIdentity(rank, info.name);
+        if (labTime != null)
+            labTime.text = BuildRecord(info);
+    }
+
+    public void Init(int rank, string name, int time)
+    {
+        SetIdentity(rank, name);
+
+        if (labTime != null)
+            labTime.text = FormatTime(time);
+    }
+
+    private void SetIdentity(int rank, string name)
+    {
+        if (labRank != null)
+            labRank.text = rank.ToString();
+        if (labName != null)
+            labName.text = string.IsNullOrWhiteSpace(name) ? "Player" : name.Trim();
+    }
+
+    private static string BuildRecord(RankInfo info)
+    {
+        string date = string.IsNullOrEmpty(info.date) ? "鍘嗗彶璁板綍" : info.date;
+        return "鍒嗘暟 " + info.score + "  鐢熷瓨 " + FormatTime(info.runTime) +
+            "  " + info.difficulty +
+            "\nBoss " + info.bosses + "  娓呴櫎 " + info.clears + "  " + date;
+    }
+
+    private static string FormatTime(int time)
+    {
+        int safeTime = Mathf.Max(0, time);
+        string text = string.Empty;
+        if (safeTime / 3600 > 0)
         {
-            str += time % 3600 / 60 + "m";
+            text += safeTime / 3600 + "h";
         }
-        str += time % 60 + "s";
 
-        labTime.text = str;
+        if (safeTime % 3600 / 60 > 0 || text != string.Empty)
+        {
+            text += safeTime % 3600 / 60 + "m";
+        }
 
+        text += safeTime % 60 + "s";
+        return text;
     }
 }

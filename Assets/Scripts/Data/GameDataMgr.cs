@@ -16,23 +16,23 @@ public class GameDataMgr
     public DifficultyData difficultyData;
     public LevelData levelData;
 
-    public int nowSelHeroIndex = 0;
-    public int nowDifficultyIndex = 1;
+    public int heroIndex = 0;
+    public int difficultyIndex = 1;
 
     private GameDataMgr()
     {
-        musicData = XmlDataMgr.Instance.LoadData(typeof(MusicData), "MusicData") as MusicData;
-        rankData = XmlDataMgr.Instance.LoadData(typeof(RankData), "RankData") as RankData;
-        roleData = XmlDataMgr.Instance.LoadData(typeof(RoleData), "RoleData") as RoleData;
-        bulletData = XmlDataMgr.Instance.LoadData(typeof(BulletData), "BulletData") as BulletData;
-        fireData = XmlDataMgr.Instance.LoadData(typeof(FireData), "FireData") as FireData;
-        difficultyData = XmlDataMgr.Instance.LoadData(typeof(DifficultyData), "DifficultyData") as DifficultyData;
-        levelData = XmlDataMgr.Instance.LoadData(typeof(LevelData), "LevelData") as LevelData;
+        musicData = XmlDataMgr.Instance.Load(typeof(MusicData), "MusicData") as MusicData;
+        rankData = XmlDataMgr.Instance.Load(typeof(RankData), "RankData") as RankData;
+        roleData = XmlDataMgr.Instance.Load(typeof(RoleData), "RoleData") as RoleData;
+        bulletData = XmlDataMgr.Instance.Load(typeof(BulletData), "BulletData") as BulletData;
+        fireData = XmlDataMgr.Instance.Load(typeof(FireData), "FireData") as FireData;
+        difficultyData = XmlDataMgr.Instance.Load(typeof(DifficultyData), "DifficultyData") as DifficultyData;
+        levelData = XmlDataMgr.Instance.Load(typeof(LevelData), "LevelData") as LevelData;
 
-        InitDefaultData();
+        InitDefaults();
     }
 
-    private void InitDefaultData()
+    private void InitDefaults()
     {
         if (musicData == null)
             musicData = new MusicData();
@@ -49,156 +49,164 @@ public class GameDataMgr
         if (levelData == null)
             levelData = new LevelData();
 
-        if (difficultyData.difficultyInfos.Count == 0)
+        if (difficultyData.difficulties.Count == 0)
         {
-            difficultyData.difficultyInfos.Add(CreateDifficulty(1, "简单", 2, 0.75f, 1.35f, 1.25f, 4f, 8f));
-            difficultyData.difficultyInfos.Add(CreateDifficulty(2, "普通", 0, 1f, 1f, 1f, 3f, 10f));
-            difficultyData.difficultyInfos.Add(CreateDifficulty(3, "困难", -1, 1.25f, 0.75f, 0.8f, 2f, 13f));
+            difficultyData.difficulties.Add(NewDifficulty(1, "简单", 2, 0.75f, 1.35f, 1.25f, 4f, 8f));
+            difficultyData.difficulties.Add(NewDifficulty(2, "普通", 0, 1f, 1f, 1f, 3f, 10f));
+            difficultyData.difficulties.Add(NewDifficulty(3, "困难", -1, 1.25f, 0.75f, 0.8f, 2f, 13f));
         }
 
-        if (levelData.levelInfos.Count == 0)
+        if (levelData.levels.Count == 0)
         {
-            levelData.levelInfos.Add(CreateLevel(1, "第一关-训练航线", 0f, 1f, 1f, 1f, "1,2"));
-            levelData.levelInfos.Add(CreateLevel(2, "第二关-密集弹幕", 30f, 1.15f, 0.85f, 0.9f, "1,2,3"));
-            levelData.levelInfos.Add(CreateLevel(3, "第三关-追踪压制", 60f, 1.35f, 0.7f, 0.75f, "2,3,4"));
-            levelData.levelInfos.Add(CreateLevel(4, "第四关-极限挑战", 100f, 1.6f, 0.55f, 0.6f, "1,2,3,4"));
+            levelData.levels.Add(NewLevel(1, "第一关-训练航线", 0f, 1f, 1f, 1f, "1,2"));
+            levelData.levels.Add(NewLevel(2, "第二关-密集弹幕", 30f, 1.15f, 0.85f, 0.9f, "1,2,3"));
+            levelData.levels.Add(NewLevel(3, "第三关-追踪压制", 60f, 1.35f, 0.7f, 0.75f, "2,3,4"));
+            levelData.levels.Add(NewLevel(4, "第四关-极限挑战", 100f, 1.6f, 0.55f, 0.6f, "1,2,3,4"));
         }
 
-        NormalizeRankData();
+        SortRanks();
     }
 
-    private DifficultyInfo CreateDifficulty(int id, string name, int hpAdd, float bulletSpeedMul, float fireCdMul, float fireDelayMul, float shieldTime, float skillCD)
+    private DifficultyInfo NewDifficulty(int id, string name, int hpBonus, float bulletRate, float fireRate, float delayRate, float shieldTime, float skillCd)
     {
         DifficultyInfo info = new DifficultyInfo();
         info.id = id;
         info.name = name;
-        info.hpAdd = hpAdd;
-        info.bulletSpeedMul = bulletSpeedMul;
-        info.fireCdMul = fireCdMul;
-        info.fireDelayMul = fireDelayMul;
+        info.hpBonus = hpBonus;
+        info.bulletRate = bulletRate;
+        info.fireRate = fireRate;
+        info.delayRate = delayRate;
         info.shieldTime = shieldTime;
-        info.skillCD = skillCD;
+        info.skillCd = skillCd;
         return info;
     }
 
-    private LevelInfo CreateLevel(int id, string name, float beginTime, float bulletSpeedMul, float fireCdMul, float fireDelayMul, string fireIds)
+    private LevelInfo NewLevel(int id, string name, float beginTime, float bulletRate, float fireRate, float delayRate, string fireIds)
     {
         LevelInfo info = new LevelInfo();
         info.id = id;
         info.name = name;
         info.beginTime = beginTime;
-        info.bulletSpeedMul = bulletSpeedMul;
-        info.fireCdMul = fireCdMul;
-        info.fireDelayMul = fireDelayMul;
+        info.bulletRate = bulletRate;
+        info.fireRate = fireRate;
+        info.delayRate = delayRate;
         info.fireIds = fireIds;
         return info;
     }
 
     public void SaveMusic()
     {
-        XmlDataMgr.Instance.SaveData(musicData, "MusicData");
+        XmlDataMgr.Instance.Save(musicData, "MusicData");
     }
 
-    public void SetMusicIsOpen(bool isOpen)
+    public void SetMusic(bool isOpen)
     {
-        musicData.musicIsopen = isOpen;
+        musicData.musicOn = isOpen;
         if (BKMusic.Instance != null)
         {
-            BKMusic.Instance.SetBKMusicIsOpen(isOpen);
+            BKMusic.Instance.SetOpen(isOpen);
         }
     }
 
-    public void SetSoundIsOpen(bool isOpen)
+    public void SetSound(bool isOpen)
     {
-        musicData.SoundIsopen = isOpen;
+        musicData.soundOn = isOpen;
     }
 
-    public void SetMusicValue(float value)
+    public void SetMusicVolume(float value)
     {
-        musicData.musicvalue = value;
+        musicData.musicVolume = value;
         if (BKMusic.Instance != null)
         {
-            BKMusic.Instance.SetMusicValue(value);
+            BKMusic.Instance.SetMusicVolume(value);
         }
     }
 
-    public void SetSoundValue(float value)
+    public void SetSoundVolume(float value)
     {
-        musicData.soundValue = value;
+        musicData.soundVolume = value;
     }
 
-    public void AddRankData(string name, int time)
+    public void AddRank(string name, int time)
     {
         RankInfo rankInfo = new RankInfo();
-        rankInfo.name = string.IsNullOrEmpty(name) ? "Player" : name;
-        rankInfo.survivalTime = Mathf.Max(0, time);
-        rankInfo.time = rankInfo.survivalTime;
-        rankInfo.difficulty = GetDifficultyName();
-        rankInfo.recordTime = System.DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+        rankInfo.name = NormalizePilotName(name);
+        rankInfo.runTime = Mathf.Max(0, time);
+        rankInfo.time = rankInfo.runTime;
+        rankInfo.difficulty = DifficultyName();
+        rankInfo.date = System.DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
         if (ScoreManager.Instance != null)
         {
-            ScoreManager.Instance.FinalizeScore();
-            rankInfo.finalScore = ScoreManager.Instance.FinalScore;
-            rankInfo.survivalTime = Mathf.FloorToInt(ScoreManager.Instance.SurvivalTime);
-            rankInfo.time = rankInfo.survivalTime;
-            rankInfo.bossRounds = ScoreManager.Instance.CompletedBossRounds;
-            rankInfo.clearedBullets = ScoreManager.Instance.ManualClearedBullets;
+            ScoreManager.Instance.FinishScore();
+            rankInfo.score = ScoreManager.Instance.TotalScore;
+            rankInfo.runTime = Mathf.FloorToInt(ScoreManager.Instance.RunTime);
+            rankInfo.time = rankInfo.runTime;
+            rankInfo.bosses = ScoreManager.Instance.BossRounds;
+            rankInfo.clears = ScoreManager.Instance.ClearCount;
         }
 
         rankInfo.Normalize();
-        rankData.rankInfos.Add(rankInfo);
+        rankData.ranks.Add(rankInfo);
 
-        NormalizeRankData();
+        SortRanks();
 
-        XmlDataMgr.Instance.SaveData(rankData, "RankData");
+        XmlDataMgr.Instance.Save(rankData, "RankData");
     }
 
-    public void NormalizeRankData()
+    private static string NormalizePilotName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return "Player";
+
+        return name.Trim();
+    }
+
+    public void SortRanks()
     {
         if (rankData == null)
         {
             rankData = new RankData();
         }
 
-        rankData.NormalizeAndSort(20);
+        rankData.Sort(20);
     }
 
-    public RoleInfo GetNowSelHeroInfo()
+    public RoleInfo GetHero()
     {
-        if (roleData.roleDatas.Count == 0)
+        if (roleData.roles.Count == 0)
         {
             RoleInfo info = new RoleInfo();
             info.hp = 4;
             info.speed = 6;
             info.volume = 5;
-            info.resName = "Airplane/Airplane1";
+            info.asset = "Airplane/Airplane1";
             info.scale = 13f;
-            info.shieldStyle = 1;
+            info.shieldId = 1;
             return info;
         }
 
-        nowSelHeroIndex = Mathf.Clamp(nowSelHeroIndex, 0, roleData.roleDatas.Count - 1);
-        return roleData.roleDatas[nowSelHeroIndex];
+        heroIndex = Mathf.Clamp(heroIndex, 0, roleData.roles.Count - 1);
+        return roleData.roles[heroIndex];
     }
 
     public void SetDifficulty(int difficultyId)
     {
-        nowDifficultyIndex = Mathf.Clamp(difficultyId, 1, difficultyData.difficultyInfos.Count);
+        difficultyIndex = Mathf.Clamp(difficultyId, 1, difficultyData.difficulties.Count);
     }
 
-    public DifficultyInfo GetNowDifficultyInfo()
+    public DifficultyInfo GetDifficulty()
     {
-        for (int i = 0; i < difficultyData.difficultyInfos.Count; i++)
+        for (int i = 0; i < difficultyData.difficulties.Count; i++)
         {
-            if (difficultyData.difficultyInfos[i].id == nowDifficultyIndex)
-                return difficultyData.difficultyInfos[i];
+            if (difficultyData.difficulties[i].id == difficultyIndex)
+                return difficultyData.difficulties[i];
         }
 
-        return difficultyData.difficultyInfos[0];
+        return difficultyData.difficulties[0];
     }
 
-    public LevelInfo GetCurrentLevelInfo()
+    public LevelInfo GetLevel()
     {
         float nowTime = 0f;
         if (GamePanel.Instance != null)
@@ -206,116 +214,116 @@ public class GameDataMgr
             nowTime = GamePanel.Instance.nowTime;
         }
 
-        LevelInfo result = levelData.levelInfos[0];
-        for (int i = 0; i < levelData.levelInfos.Count; i++)
+        LevelInfo result = levelData.levels[0];
+        for (int i = 0; i < levelData.levels.Count; i++)
         {
-            if (nowTime >= levelData.levelInfos[i].beginTime)
+            if (nowTime >= levelData.levels[i].beginTime)
             {
-                result = levelData.levelInfos[i];
+                result = levelData.levels[i];
             }
         }
 
         return result;
     }
 
-    public string GetDifficultyName()
+    public string DifficultyName()
     {
-        return GetNowDifficultyInfo().name;
+        return GetDifficulty().name;
     }
 
-    public string GetLevelName()
+    public string LevelName()
     {
-        return GetCurrentLevelInfo().name;
+        return GetLevel().name;
     }
 
-    public int GetPlayerHpAdd()
+    public int HpBonus()
     {
-        return GetNowDifficultyInfo().hpAdd;
+        return GetDifficulty().hpBonus;
     }
 
-    public float GetShieldTime()
+    public float ShieldTime()
     {
-        return GetNowDifficultyInfo().shieldTime;
+        return GetDifficulty().shieldTime;
     }
 
-    public float GetSkillCD()
+    public float SkillCd()
     {
-        return GetNowDifficultyInfo().skillCD;
+        return GetDifficulty().skillCd;
     }
 
-    public float GetBulletSpeedMul()
+    public float BulletSpeed()
     {
-        float multiplier = GetNowDifficultyInfo().bulletSpeedMul * GetCurrentLevelInfo().bulletSpeedMul;
+        float rate = GetDifficulty().bulletRate * GetLevel().bulletRate;
         if (DifficultyDirector.Instance != null)
         {
-            multiplier = DifficultyDirector.Instance.ApplyNormalBulletSpeed(multiplier);
+            rate = DifficultyDirector.Instance.ScaleBullet(rate);
         }
 
-        return multiplier;
+        return rate;
     }
 
-    public float GetFireCD(float cd)
+    public float FireGap(float cd)
     {
         if (cd <= 0f)
             return cd;
 
-        float multiplier = GetNowDifficultyInfo().fireCdMul * GetCurrentLevelInfo().fireCdMul;
+        float rate = GetDifficulty().fireRate * GetLevel().fireRate;
         if (DifficultyDirector.Instance != null)
         {
-            multiplier = DifficultyDirector.Instance.ApplyNormalFireInterval(multiplier);
+            rate = DifficultyDirector.Instance.ScaleFire(rate);
         }
 
-        float value = cd * multiplier;
+        float value = cd * rate;
         return Mathf.Max(0.08f, value);
     }
 
-    public float GetFireDelay(float delay)
+    public float FireDelay(float delay)
     {
         if (delay <= 0f)
             return delay;
 
-        float multiplier = GetNowDifficultyInfo().fireDelayMul * GetCurrentLevelInfo().fireDelayMul;
+        float rate = GetDifficulty().delayRate * GetLevel().delayRate;
         if (DifficultyDirector.Instance != null)
         {
-            multiplier = DifficultyDirector.Instance.ApplyNormalFireInterval(multiplier);
+            rate = DifficultyDirector.Instance.ScaleFire(rate);
         }
 
-        float value = delay * multiplier;
+        float value = delay * rate;
         return Mathf.Max(0.5f, value);
     }
 
-    public float GetBossBulletSpeedMul()
+    public float BossBulletSpeed()
     {
-        float multiplier = GetNowDifficultyInfo().bulletSpeedMul;
+        float rate = GetDifficulty().bulletRate;
         if (DifficultyDirector.Instance != null)
         {
-            multiplier = DifficultyDirector.Instance.ApplyBossBulletSpeed(multiplier);
+            rate = DifficultyDirector.Instance.ScaleBossBullet(rate);
         }
 
-        return multiplier;
+        return rate;
     }
 
-    public float GetBossFireInterval(float interval)
+    public float BossFireGap(float interval)
     {
         if (interval <= 0f)
             return interval;
 
-        float multiplier = GetNowDifficultyInfo().fireCdMul;
+        float rate = GetDifficulty().fireRate;
         if (DifficultyDirector.Instance != null)
         {
-            multiplier = DifficultyDirector.Instance.ApplyBossFireInterval(multiplier);
+            rate = DifficultyDirector.Instance.ScaleBossFire(rate);
         }
 
-        return Mathf.Max(0.16f, interval * multiplier);
+        return Mathf.Max(0.16f, interval * rate);
     }
 
-    public FireInfo GetRandomFireInfo()
+    public FireInfo RandomFire()
     {
-        List<FireInfo> source = fireData.fireInfoList;
+        List<FireInfo> source = fireData.fires;
         if (source.Count == 0)
             return null;
 
-        List<int> ids = ParseIds(GetCurrentLevelInfo().fireIds);
+        List<int> ids = ParseIds(GetLevel().fireIds);
         List<FireInfo> candidates = new List<FireInfo>();
 
         for (int i = 0; i < source.Count; i++)
@@ -334,15 +342,15 @@ public class GameDataMgr
         return candidates[Random.Range(0, candidates.Count)];
     }
 
-    public BulletInfo GetBulletInfoById(int id)
+    public BulletInfo GetBullet(int id)
     {
-        for (int i = 0; i < bulletData.bulletInfoList.Count; i++)
+        for (int i = 0; i < bulletData.bullets.Count; i++)
         {
-            if (bulletData.bulletInfoList[i].id == id)
-                return bulletData.bulletInfoList[i];
+            if (bulletData.bullets[i].id == id)
+                return bulletData.bullets[i];
         }
 
-        return bulletData.bulletInfoList.Count > 0 ? bulletData.bulletInfoList[0] : null;
+        return bulletData.bullets.Count > 0 ? bulletData.bullets[0] : null;
     }
 
     private List<int> ParseIds(string ids)

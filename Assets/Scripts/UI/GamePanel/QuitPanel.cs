@@ -12,41 +12,41 @@ public class QuitPanel : BasePanel<QuitPanel>
     {
         if (btnSure != null)
         {
-            btnSure.onClick.Add(new EventDelegate(ReturnToMainMenu));
+            btnSure.onClick.Add(new EventDelegate(MainMenu));
         }
 
         if (btnRestart != null)
         {
-            btnRestart.onClick.Add(new EventDelegate(RestartGame));
+            btnRestart.onClick.Add(new EventDelegate(Restart));
         }
 
         if (btnClose != null)
         {
-            btnClose.onClick.Add(new EventDelegate(ResumeGame));
+            btnClose.onClick.Add(new EventDelegate(Resume));
         }
 
         Hideme();
     }
 
-    public void ReturnToMainMenu()
+    public void MainMenu()
     {
-        StartCoroutine(LoadSceneAfterPoolCleanup("BeginScene"));
+        StartCoroutine(LoadScene("BeginScene"));
     }
 
-    public void RestartGame()
+    public void Restart()
     {
-        StartCoroutine(LoadSceneAfterPoolCleanup("GameScene"));
+        StartCoroutine(LoadScene("GameScene"));
     }
 
-    private IEnumerator LoadSceneAfterPoolCleanup(string sceneName)
+    private IEnumerator LoadScene(string sceneName)
     {
         Time.timeScale = 0f;
 
         ObjectPoolManager pool = ObjectPoolManager.Instance;
         if (pool != null)
         {
-            pool.poolingEnabled = false;
-            pool.ClearInactive();
+            pool.usePool = false;
+            pool.ClearPool();
         }
 
         yield return null;
@@ -55,13 +55,13 @@ public class QuitPanel : BasePanel<QuitPanel>
         SceneManager.LoadScene(sceneName);
     }
 
-    public void ResumeGame()
+    public void Resume()
     {
         Hideme();
 
         if (GameFlowManager.Instance != null)
         {
-            GameFlowManager.Instance.ResumeGame();
+            GameFlowManager.Instance.Resume();
         }
         else
         {

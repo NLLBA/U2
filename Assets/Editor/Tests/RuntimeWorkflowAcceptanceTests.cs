@@ -41,7 +41,7 @@ public class RuntimeWorkflowAcceptanceTests
             "DifficultyPanel did not initialize in BeginScene.");
 
         DifficultyPanel.Instance.Showme();
-        DifficultyPanel.Instance.SelectDifficulty(2);
+        DifficultyPanel.Instance.Select(2);
         EventDelegate.Execute(DifficultyPanel.Instance.btnStart.onClick);
 
         yield return WaitFor(
@@ -52,7 +52,7 @@ public class RuntimeWorkflowAcceptanceTests
             "Starting from DifficultyPanel did not produce a ready GameScene.");
 
         Assert.IsNotNull(GameObject.Find("Main"));
-        Assert.AreEqual(2, GameDataMgr.Instance.GetNowDifficultyInfo().id);
+        Assert.AreEqual(2, GameDataMgr.Instance.GetDifficulty().id);
         Assert.AreEqual(GameFlowState.Normal, GameFlowManager.Instance.State);
         Assert.AreEqual(1f, Time.timeScale, 0.001f);
     }
@@ -90,11 +90,11 @@ public class RuntimeWorkflowAcceptanceTests
             yield return null;
         }
 
-        float pausedSurvivalTime = flow.SurvivalTime;
+        float pausedSurvivalTime = flow.RunTime;
         yield return new WaitForSecondsRealtime(0.2f);
 
         Assert.AreEqual(0f, Time.timeScale, 0.001f);
-        Assert.AreEqual(pausedSurvivalTime, flow.SurvivalTime, 0.01f);
+        Assert.AreEqual(pausedSurvivalTime, flow.RunTime, 0.01f);
 
         EventDelegate.Execute(QuitPanel.Instance.btnClose.onClick);
         deadline = Time.realtimeSinceStartup + DefaultTimeout;
@@ -120,14 +120,14 @@ public class RuntimeWorkflowAcceptanceTests
             IsGameSceneReady,
             "GameScene runtime systems did not initialize.");
 
-        GameFlowManager.Instance.AdvanceFlow(4f);
+        GameFlowManager.Instance.Advance(4f);
         PlayerObject.Instance.Dead();
         yield return null;
 
         Assert.AreEqual(GameFlowState.GameOver, GameFlowManager.Instance.State);
         Assert.AreEqual(0f, Time.timeScale, 0.001f);
-        Assert.IsTrue(ScoreManager.Instance.IsFinalized);
-        Assert.Greater(ScoreManager.Instance.FinalScore, 0);
+        Assert.IsTrue(ScoreManager.Instance.Finished);
+        Assert.Greater(ScoreManager.Instance.TotalScore, 0);
         Assert.IsNotNull(GameOverPanel.Instance);
         Assert.IsTrue(GameOverPanel.Instance.gameObject.activeSelf);
         Assert.IsFalse(string.IsNullOrEmpty(GameOverPanel.Instance.labTime.text));
@@ -149,40 +149,40 @@ public class RuntimeWorkflowAcceptanceTests
 
         try
         {
-            GameFlowManager.Instance.AdvanceFlow(12f);
-            ScoreManager.Instance.RegisterManualBulletClear();
+            GameFlowManager.Instance.Advance(12f);
+            ScoreManager.Instance.RegisterClear();
             PlayerObject.Instance.Dead();
             yield return null;
 
             RankData source = new RankData();
-            source.rankInfos.Add(new RankInfo
+            source.ranks.Add(new RankInfo
             {
                 name = "RuntimeAcceptancePilot",
-                finalScore = ScoreManager.Instance.FinalScore,
-                survivalTime = Mathf.FloorToInt(ScoreManager.Instance.SurvivalTime),
-                difficulty = GameDataMgr.Instance.GetDifficultyName(),
-                bossRounds = ScoreManager.Instance.CompletedBossRounds,
-                clearedBullets = ScoreManager.Instance.ManualClearedBullets,
-                recordTime = "2026-08-05 23:30:00",
+                score = ScoreManager.Instance.TotalScore,
+                runTime = Mathf.FloorToInt(ScoreManager.Instance.RunTime),
+                difficulty = GameDataMgr.Instance.DifficultyName(),
+                bosses = ScoreManager.Instance.BossRounds,
+                clears = ScoreManager.Instance.ClearCount,
+                date = "2026-08-05 23:30:00",
             });
-            source.NormalizeAndSort();
+            source.Sort();
 
-            XmlDataMgr.Instance.SaveDataToPath(source, rankPath);
-            RankData reloaded = XmlDataMgr.Instance.LoadDataFromPaths(
+            XmlDataMgr.Instance.SavePath(source, rankPath);
+            RankData reloaded = XmlDataMgr.Instance.LoadPaths(
                 typeof(RankData),
                 rankPath,
                 string.Empty) as RankData;
 
             Assert.IsNotNull(reloaded);
-            reloaded.NormalizeAndSort();
-            Assert.AreEqual(1, reloaded.rankInfos.Count);
+            reloaded.Sort();
+            Assert.AreEqual(1, reloaded.ranks.Count);
 
-            RankInfo saved = reloaded.rankInfos[0];
+            RankInfo saved = reloaded.ranks[0];
             Assert.AreEqual("RuntimeAcceptancePilot", saved.name);
-            Assert.AreEqual(ScoreManager.Instance.FinalScore, saved.finalScore);
-            Assert.AreEqual(12, saved.survivalTime);
-            Assert.AreEqual(1, saved.clearedBullets);
-            Assert.AreEqual("2026-08-05 23:30:00", saved.recordTime);
+            Assert.AreEqual(ScoreManager.Instance.TotalScore, saved.score);
+            Assert.AreEqual(12, saved.runTime);
+            Assert.AreEqual(1, saved.clears);
+            Assert.AreEqual("2026-08-05 23:30:00", saved.date);
         }
         finally
         {
@@ -210,7 +210,7 @@ public class RuntimeWorkflowAcceptanceTests
             yield return null;
         }
 
-        GameFlowManager.Instance.AdvanceFlow(5f);
+        GameFlowManager.Instance.Advance(5f);
         EventDelegate.Execute(GamePanel.Instance.btnBack.onClick);
 
         deadline = Time.realtimeSinceStartup + DefaultTimeout;
@@ -246,8 +246,8 @@ public class RuntimeWorkflowAcceptanceTests
         }
 
         Assert.AreEqual(GameFlowState.Normal, GameFlowManager.Instance.State);
-        Assert.Less(GameFlowManager.Instance.SurvivalTime, 1.5f);
-        Assert.IsFalse(ScoreManager.Instance.IsFinalized);
+        Assert.Less(GameFlowManager.Instance.RunTime, 1.5f);
+        Assert.IsFalse(ScoreManager.Instance.Finished);
         Assert.AreEqual(1f, Time.timeScale, 0.001f);
     }
 

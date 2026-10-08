@@ -1,3 +1,5 @@
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class Main : MonoBehaviour
@@ -5,18 +7,18 @@ public class Main : MonoBehaviour
     void Start()
     {
         Time.timeScale = 1;
-        ObjectPoolManager.EnsureInstance(gameObject);
-        SoundManager.EnsureInstance();
-        GameFlowManager.EnsureInstance(gameObject);
-        DifficultyDirector.EnsureInstance(gameObject);
-        ScoreManager.EnsureInstance(gameObject);
-        BossController.EnsureInstance(gameObject);
+        ObjectPoolManager.Ensure(gameObject);
+        SoundManager.Ensure();
+        GameFlowManager.Ensure(gameObject);
+        DifficultyDirector.Ensure(gameObject);
+        ScoreManager.Ensure(gameObject);
+        BossController.Ensure(gameObject);
 
-        RoleInfo info = GameDataMgr.Instance.GetNowSelHeroInfo();
-        GameObject prefab = Resources.Load<GameObject>(info.resName);
+        RoleInfo info = GameDataMgr.Instance.GetHero();
+        GameObject prefab = Resources.Load<GameObject>(info.asset);
         if (prefab == null)
         {
-            Debug.LogError("Player resource not found: " + info.resName);
+            Debug.LogError("Player resource not found: " + info.asset);
             return;
         }
 
@@ -27,11 +29,11 @@ public class Main : MonoBehaviour
             playerObj = obj.AddComponent<PlayerObject>();
         }
 
-        int hp = Mathf.Max(1, info.hp + GameDataMgr.Instance.GetPlayerHpAdd());
+        int hp = Mathf.Max(1, info.hp + GameDataMgr.Instance.HpBonus());
         playerObj.speed = info.speed * 20;
         playerObj.maxHp = hp;
         playerObj.nowHp = hp;
-        playerObj.roundSpeed = 20;
+        playerObj.turnSpeed = 20;
 
         GamePanel.Instance.ChangeHP(hp);
     }

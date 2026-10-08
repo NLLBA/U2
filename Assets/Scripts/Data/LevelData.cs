@@ -1,9 +1,12 @@
+using System.Collections;
 using System.Collections.Generic;
+using UnityEngine;
 using System.Xml.Serialization;
 
 public class LevelData
 {
-    public List<LevelInfo> levelInfos = new List<LevelInfo>();
+    [XmlArray("levelInfos")]
+    public List<LevelInfo> levels = new List<LevelInfo>();
 }
 
 public class LevelInfo
@@ -17,14 +20,14 @@ public class LevelInfo
     [XmlAttribute]
     public float beginTime;
 
-    [XmlAttribute]
-    public float bulletSpeedMul;
+    [XmlAttribute("bulletSpeedMul")]
+    public float bulletRate;
 
-    [XmlAttribute]
-    public float fireCdMul;
+    [XmlAttribute("fireCdMul")]
+    public float fireRate;
 
-    [XmlAttribute]
-    public float fireDelayMul;
+    [XmlAttribute("fireDelayMul")]
+    public float delayRate;
 
     [XmlAttribute]
     public string fireIds;

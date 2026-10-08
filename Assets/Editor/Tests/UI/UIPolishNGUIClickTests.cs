@@ -89,21 +89,21 @@ public class UIPolishNGUIClickTests
     [Test]
     public void SupportedAspectRatiosKeepTheReferenceFrameVisible()
     {
-        const float referenceAspect = 1920f / 1080f;
-        const float referenceFieldOfView = 60f;
-        float referenceHalfHeight = Mathf.Tan(referenceFieldOfView * 0.5f * Mathf.Deg2Rad);
+        const float refAspect = 1920f / 1080f;
+        const float refFov = 60f;
+        float refHalf = Mathf.Tan(refFov * 0.5f * Mathf.Deg2Rad);
 
         for (int i = 0; i < SupportedResolutions.Length; i++)
         {
             Vector2Int resolution = SupportedResolutions[i];
             float aspect = (float)resolution.x / resolution.y;
-            int activeRootHeight = NGUIAspectSafeLayout.CalculateFitHeight(1920, 1080, aspect);
-            float rootScaleRatio = 1080f / activeRootHeight;
-            float fieldOfView = NGUIAspectSafeLayout.CalculateVerticalFieldOfView(
-                referenceFieldOfView, referenceAspect, aspect);
-            float fittedHalfHeight = Mathf.Tan(fieldOfView * 0.5f * Mathf.Deg2Rad);
-            float verticalExtent = referenceHalfHeight / fittedHalfHeight;
-            float horizontalExtent = referenceHalfHeight * referenceAspect / (fittedHalfHeight * aspect);
+            int rootHeight = NGUIAspectSafeLayout.FitHeight(1920, 1080, aspect);
+            float rootScaleRatio = 1080f / rootHeight;
+            float fieldOfView = NGUIAspectSafeLayout.VerticalFov(
+                refFov, refAspect, aspect);
+            float fitHalf = Mathf.Tan(fieldOfView * 0.5f * Mathf.Deg2Rad);
+            float verticalExtent = refHalf / fitHalf;
+            float horizontalExtent = refHalf * refAspect / (fitHalf * aspect);
 
             Assert.LessOrEqual(verticalExtent, 1.0001f, resolution + " crops the reference height.");
             Assert.LessOrEqual(horizontalExtent, 1.0001f, resolution + " crops the reference width.");
@@ -111,10 +111,10 @@ public class UIPolishNGUIClickTests
                 Mathf.Abs(horizontalExtent - 1f) < 0.0001f,
                 resolution + " must fit exactly one reference dimension.");
 
-            float orthographicSize = NGUIAspectSafeLayout.CalculateOrthographicSize(
-                1920, 1080, activeRootHeight, aspect, 1f);
+            float orthographicSize = NGUIAspectSafeLayout.OrthoSize(
+                1920, 1080, rootHeight, aspect, 1f);
             float orthographicVerticalExtent = rootScaleRatio / orthographicSize;
-            float orthographicHorizontalExtent = referenceAspect * rootScaleRatio /
+            float orthographicHorizontalExtent = refAspect * rootScaleRatio /
                 (orthographicSize * aspect);
             Assert.LessOrEqual(orthographicVerticalExtent, 1.0001f,
                 resolution + " crops the orthographic reference height.");
@@ -146,10 +146,10 @@ public class UIPolishNGUIClickTests
 
         ChoosePanel controller = panel.GetComponent<ChoosePanel>();
         Assert.IsNotNull(controller);
-        Assert.IsNotNull(controller.heroNameLabel, "The generated fighter-name label must be serialized on ChoosePanel.");
-        Assert.AreEqual(ChoosePanel.GetHeroDisplayName(GameDataMgr.Instance.GetNowSelHeroInfo()),
-            controller.heroNameLabel.text);
-        Assert.AreNotEqual("当前战机", controller.heroNameLabel.text);
+        Assert.IsNotNull(controller.labHero, "The generated fighter-name label must be serialized on ChoosePanel.");
+        Assert.AreEqual(ChoosePanel.HeroName(GameDataMgr.Instance.GetHero()),
+            controller.labHero.text);
+        Assert.AreNotEqual("当前战机", controller.labHero.text);
 
         AssertSingleNormalLabels(panel.transform);
         AssertChooseButtonTheme(panel.transform);
@@ -169,7 +169,7 @@ public class UIPolishNGUIClickTests
         Assert.IsNotNull(controller.btnStart);
         Assert.IsNotNull(controller.heroPos);
         Assert.IsNotNull(controller.uis);
-        Assert.IsNotNull(controller.heroNameLabel);
+        Assert.IsNotNull(controller.labHero);
         Assert.AreEqual(10, controller.hpObjs.Count);
         Assert.AreEqual(10, controller.speedObjs.Count);
         Assert.AreEqual(10, controller.volumeObjs.Count);
@@ -210,20 +210,20 @@ public class UIPolishNGUIClickTests
         UIButton rightButton = FindChildComponent<UIButton>(choosePanel.transform, "btnRight");
         UIButton startButton = FindChildComponent<UIButton>(choosePanel.transform, "btnStart");
         UIButton closeButton = FindChildComponent<UIButton>(choosePanel.transform, "btnClose");
-        int roleCount = GameDataMgr.Instance.roleData.roleDatas.Count;
+        int roleCount = GameDataMgr.Instance.roleData.roles.Count;
         Assert.Greater(roleCount, 1, "ChoosePanel click validation needs at least two roles.");
-        Assert.AreEqual(0, GameDataMgr.Instance.nowSelHeroIndex, "ChoosePanel must retain its default role.");
+        Assert.AreEqual(0, GameDataMgr.Instance.heroIndex, "ChoosePanel must retain its default role.");
         AssertSelectedHeroName(choosePanel);
 
         InjectNguiTouchClick(leftButton);
         yield return null;
-        Assert.AreEqual(roleCount - 1, GameDataMgr.Instance.nowSelHeroIndex,
+        Assert.AreEqual(roleCount - 1, GameDataMgr.Instance.heroIndex,
             "The real NGUI left-button click must preserve the original wrap order.");
         AssertSelectedHeroName(choosePanel);
 
         InjectNguiTouchClick(rightButton);
         yield return null;
-        Assert.AreEqual(0, GameDataMgr.Instance.nowSelHeroIndex,
+        Assert.AreEqual(0, GameDataMgr.Instance.heroIndex,
             "The real NGUI right-button click must restore the default role.");
         AssertSelectedHeroName(choosePanel);
 
@@ -235,11 +235,11 @@ public class UIPolishNGUIClickTests
         InjectNguiTouchClick(beginButton);
         yield return null;
         Assert.IsTrue(choosePanel.activeSelf, "ChoosePanel must reopen through the real main-menu click.");
-        Assert.AreEqual(0, GameDataMgr.Instance.nowSelHeroIndex, "Reopening ChoosePanel must retain the original default role.");
+        Assert.AreEqual(0, GameDataMgr.Instance.heroIndex, "Reopening ChoosePanel must retain the original default role.");
 
         InjectNguiTouchClick(rightButton);
         yield return null;
-        int selectedHeroIndex = GameDataMgr.Instance.nowSelHeroIndex;
+        int selectedHeroIndex = GameDataMgr.Instance.heroIndex;
         Assert.AreEqual(1, selectedHeroIndex, "The workflow test must select a non-default role before choosing difficulty.");
 
         InjectNguiTouchClick(startButton);
@@ -257,8 +257,8 @@ public class UIPolishNGUIClickTests
         yield return null;
         Assert.AreEqual(TestBeginScenePath, SceneManager.GetActiveScene().path,
             "Choosing a difficulty must wait for explicit start confirmation.");
-        Assert.AreEqual(3, GameDataMgr.Instance.nowDifficultyIndex);
-        Assert.AreEqual(3, difficultyController.SelectedDifficultyId);
+        Assert.AreEqual(3, GameDataMgr.Instance.difficultyIndex);
+        Assert.AreEqual(3, difficultyController.DifficultyId);
         StringAssert.Contains("困难", difficultyController.labSelected.text);
         StringAssert.Contains("125%", difficultyController.labDetail.text);
 
@@ -266,13 +266,13 @@ public class UIPolishNGUIClickTests
         yield return null;
         Assert.IsTrue(choosePanel.activeSelf, "Difficulty back must restore ChoosePanel.");
         Assert.IsFalse(difficultyPanel.activeSelf, "Difficulty back must close DifficultyPanel.");
-        Assert.AreEqual(selectedHeroIndex, GameDataMgr.Instance.nowSelHeroIndex,
+        Assert.AreEqual(selectedHeroIndex, GameDataMgr.Instance.heroIndex,
             "Returning from difficulty selection must preserve the selected role.");
 
         InjectNguiTouchClick(startButton);
         yield return null;
         Assert.IsTrue(difficultyPanel.activeSelf, "ChoosePanel confirmation must reopen DifficultyPanel.");
-        Assert.AreEqual(3, difficultyController.SelectedDifficultyId,
+        Assert.AreEqual(3, difficultyController.DifficultyId,
             "Reopening DifficultyPanel must retain the selected difficulty.");
 
         for (int i = 1; i < BeginPanels.Length; i++)
@@ -447,7 +447,7 @@ public class UIPolishNGUIClickTests
         int leftWidth, int rightWidth)
     {
         const float minimumLeftClearance = 0.05f;
-        const float minimumRightClearance = 8f / NGUIAspectSafeLayout.DefaultReferenceWidth;
+        const float minimumRightClearance = 8f / NGUIAspectSafeLayout.DefaultWidth;
         Camera camera = controller.uis;
         Assert.IsNotNull(camera);
         float stageCenter = camera.WorldToViewportPoint(stage.position).x;
@@ -456,13 +456,13 @@ public class UIPolishNGUIClickTests
         float rightInnerEdge = camera.WorldToViewportPoint(
             right.transform.TransformPoint(new Vector3(-rightWidth * 0.5f, 0f, 0f))).x;
         float centerSum = 0f;
-        int aircraftCount = GameDataMgr.Instance.roleData.roleDatas.Count;
+        int aircraftCount = GameDataMgr.Instance.roleData.roles.Count;
 
         for (int i = 0; i < aircraftCount; i++)
         {
-            RoleInfo info = GameDataMgr.Instance.roleData.roleDatas[i];
-            GameObject prefab = Resources.Load<GameObject>(info.resName);
-            Assert.IsNotNull(prefab, info.resName + " must exist for the ChoosePanel visual-bounds check.");
+            RoleInfo info = GameDataMgr.Instance.roleData.roles[i];
+            GameObject prefab = Resources.Load<GameObject>(info.asset);
+            Assert.IsNotNull(prefab, info.asset + " must exist for the ChoosePanel visual-bounds check.");
 
             GameObject aircraft = UnityEngine.Object.Instantiate(prefab, controller.heroPos, false);
             try
@@ -478,11 +478,11 @@ public class UIPolishNGUIClickTests
                 centerSum += visualCenter;
 
                 Assert.AreEqual(stageCenter, visualCenter, 0.055f,
-                    info.resName + " is visually off-center through the perspective UI camera.");
+                    info.asset + " is visually off-center through the perspective UI camera.");
                 Assert.GreaterOrEqual(minX - leftInnerEdge, minimumLeftClearance,
-                    info.resName + " presses against the left navigation button.");
+                    info.asset + " presses against the left navigation button.");
                 Assert.GreaterOrEqual(rightInnerEdge - maxX, minimumRightClearance,
-                    info.resName + " presses against the right navigation button.");
+                    info.asset + " presses against the right navigation button.");
             }
             finally
             {
@@ -537,9 +537,9 @@ public class UIPolishNGUIClickTests
     private static void AssertSelectedHeroName(GameObject choosePanel)
     {
         ChoosePanel controller = choosePanel.GetComponent<ChoosePanel>();
-        Assert.IsNotNull(controller.heroNameLabel);
-        Assert.AreEqual(ChoosePanel.GetHeroDisplayName(GameDataMgr.Instance.GetNowSelHeroInfo()),
-            controller.heroNameLabel.text, "The fighter name must follow the selected role after a real NGUI click.");
+        Assert.IsNotNull(controller.labHero);
+        Assert.AreEqual(ChoosePanel.HeroName(GameDataMgr.Instance.GetHero()),
+            controller.labHero.text, "The fighter name must follow the selected role after a real NGUI click.");
     }
 
     private static void AssertSceneButtonVisuals(string scenePath, PanelButtons[] panels)
@@ -601,11 +601,11 @@ public class UIPolishNGUIClickTests
             AssertButtonVisual(button, true);
 
             UICamera camera = FindEventCamera(button.gameObject.layer);
-            Vector2 screenPosition = GetColliderScreenPosition(camera, collider);
-            UICamera.MouseOrTouch ray = new UICamera.MouseOrTouch { pos = screenPosition };
+            Vector2 screenPos = GetColliderScreenPosition(camera, collider);
+            UICamera.MouseOrTouch ray = new UICamera.MouseOrTouch { pos = screenPos };
             UICamera.Raycast(ray);
 
-            Ray physicsRay = camera.cachedCamera.ScreenPointToRay(screenPosition);
+            Ray physicsRay = camera.cachedCamera.ScreenPointToRay(screenPos);
             float rayDistance = camera.rangeDistance > 0f
                 ? camera.rangeDistance
                 : camera.cachedCamera.farClipPlane - camera.cachedCamera.nearClipPlane;
@@ -628,16 +628,16 @@ public class UIPolishNGUIClickTests
                 ray.current,
                 activePanel.name + "/" + button.name + " was filtered or another object intercepted its NGUI raycast. " +
                 "camera=" + camera.name +
-                " screen=" + screenPosition +
+                " screen=" + screenPos +
                 " screenSize=" + Screen.width + "x" + Screen.height +
                 " world=" + collider.transform.TransformPoint(collider.center) +
                 " physicsHits=[" + hitSummary + "]");
-            InjectNguiTouchPress(button, camera, screenPosition);
+            InjectNguiTouchPress(button, camera, screenPos);
             validatedRaycasts++;
         }
     }
 
-    private static void InjectNguiTouchPress(UIButton button, UICamera camera, Vector2 screenPosition)
+    private static void InjectNguiTouchPress(UIButton button, UICamera camera, Vector2 screenPos)
     {
         bool receivedPress = false;
         UIEventListener listener = UIEventListener.Get(button.gameObject);
@@ -649,7 +649,7 @@ public class UIPolishNGUIClickTests
         {
             fingerId = 91,
             phase = TouchPhase.Began,
-            position = screenPosition,
+            position = screenPos,
             tapCount = 1
         };
 
@@ -691,10 +691,10 @@ public class UIPolishNGUIClickTests
         Assert.IsTrue(collider.enabled, button.name + " has a disabled collider before the real click.");
 
         UICamera camera = FindEventCamera(button.gameObject.layer);
-        Vector2 screenPosition = GetColliderScreenPosition(camera, collider);
-        UICamera.MouseOrTouch ray = new UICamera.MouseOrTouch { pos = screenPosition };
+        Vector2 screenPos = GetColliderScreenPosition(camera, collider);
+        UICamera.MouseOrTouch ray = new UICamera.MouseOrTouch { pos = screenPos };
         UICamera.Raycast(ray);
-        Ray physicsRay = camera.cachedCamera.ScreenPointToRay(screenPosition);
+        Ray physicsRay = camera.cachedCamera.ScreenPointToRay(screenPos);
         float rayDistance = camera.rangeDistance > 0f
             ? camera.rangeDistance
             : camera.cachedCamera.farClipPlane - camera.cachedCamera.nearClipPlane;
@@ -710,7 +710,7 @@ public class UIPolishNGUIClickTests
         }
         Assert.AreSame(button.gameObject, ray.current,
             "Injected touch must begin on the real button collider. button=" + button.name +
-            " screen=" + screenPosition + " world=" + collider.transform.TransformPoint(collider.center) +
+            " screen=" + screenPos + " world=" + collider.transform.TransformPoint(collider.center) +
             " physicsHits=[" + hitSummary + "]");
 
         int touchCount = 1;
@@ -718,7 +718,7 @@ public class UIPolishNGUIClickTests
         {
             fingerId = 77,
             phase = TouchPhase.Began,
-            position = screenPosition,
+            position = screenPos,
             tapCount = 1
         };
 
@@ -818,8 +818,8 @@ public class UIPolishNGUIClickTests
     private static Vector2 GetColliderScreenPosition(UICamera camera, BoxCollider collider)
     {
         Vector3 worldPosition = collider.transform.TransformPoint(collider.center);
-        Vector3 screenPosition = camera.cachedCamera.WorldToScreenPoint(worldPosition);
-        return new Vector2(screenPosition.x, screenPosition.y);
+        Vector3 screenPos = camera.cachedCamera.WorldToScreenPoint(worldPosition);
+        return new Vector2(screenPos.x, screenPos.y);
     }
 
     private static void AssertAspectSafeUiRoots(string scenePath)
@@ -848,9 +848,9 @@ public class UIPolishNGUIClickTests
 
             NGUIAspectSafeLayout layout = root.GetComponent<NGUIAspectSafeLayout>();
             Assert.IsNotNull(layout, root.name + " must update its NGUI Camera for aspect and safe-area changes.");
-            Assert.AreEqual(1920, layout.ReferenceWidth);
-            Assert.AreEqual(1080, layout.ReferenceHeight);
-            Assert.IsTrue(layout.RespectScreenSafeArea);
+            Assert.AreEqual(1920, layout.RefWidth);
+            Assert.AreEqual(1080, layout.RefHeight);
+            Assert.IsTrue(layout.UseSafeArea);
             Assert.IsNotNull(layout.UiCamera);
             Assert.IsTrue(layout.UiCamera.transform.IsChildOf(root.transform));
         }

@@ -1,9 +1,12 @@
 using System.Collections.Generic;
+using System.Collections;
+using UnityEngine;
 using System.Xml.Serialization;
 
 public class DifficultyData
 {
-    public List<DifficultyInfo> difficultyInfos = new List<DifficultyInfo>();
+    [XmlArray("difficultyInfos")]
+    public List<DifficultyInfo> difficulties = new List<DifficultyInfo>();
 }
 
 public class DifficultyInfo
@@ -14,21 +17,21 @@ public class DifficultyInfo
     [XmlAttribute]
     public string name;
 
-    [XmlAttribute]
-    public int hpAdd;
+    [XmlAttribute("hpAdd")]
+    public int hpBonus;
 
-    [XmlAttribute]
-    public float bulletSpeedMul;
+    [XmlAttribute("bulletSpeedMul")]
+    public float bulletRate;
 
-    [XmlAttribute]
-    public float fireCdMul;
+    [XmlAttribute("fireCdMul")]
+    public float fireRate;
 
-    [XmlAttribute]
-    public float fireDelayMul;
+    [XmlAttribute("fireDelayMul")]
+    public float delayRate;
 
     [XmlAttribute]
     public float shieldTime;
 
-    [XmlAttribute]
-    public float skillCD;
+    [XmlAttribute("skillCD")]
+    public float skillCd;
 }

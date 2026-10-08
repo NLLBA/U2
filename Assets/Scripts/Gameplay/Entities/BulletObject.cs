@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -7,36 +8,36 @@ public enum BulletSource
     Boss,
 }
 
-public class BulletObject : MonoBehaviour, IPoolableObject
+public class BulletObject : MonoBehaviour, IPoolable
 {
-    private static List<BulletObject> allBullets = new List<BulletObject>();
+    private static List<BulletObject> activeBullets = new List<BulletObject>();
 
     private BulletInfo info;
     private float time;
     private bool isDead;
-    private float fixedSpeedMultiplier = 1f;
+    private float speedRate = 1f;
 
     public BulletSource Source { get; private set; }
     public bool IsDead => isDead;
 
     private void OnEnable()
     {
-        RegisterActiveBullet();
+        Register();
     }
 
     private void OnDestroy()
     {
-        allBullets.Remove(this);
+        activeBullets.Remove(this);
     }
 
     private void OnDisable()
     {
-        allBullets.Remove(this);
+        activeBullets.Remove(this);
     }
 
-    public static void ClearAllBullets()
+    public static void ClearAll()
     {
-        BulletObject[] bullets = allBullets.ToArray();
+        BulletObject[] bullets = activeBullets.ToArray();
         for (int i = 0; i < bullets.Length; i++)
         {
             if (bullets[i] != null)
@@ -46,27 +47,27 @@ public class BulletObject : MonoBehaviour, IPoolableObject
         }
     }
 
-    public static int ClearBossBullets()
+    public static int ClearBoss()
     {
-        int clearedCount = 0;
-        BulletObject[] bullets = allBullets.ToArray();
+        int count = 0;
+        BulletObject[] bullets = activeBullets.ToArray();
         for (int i = 0; i < bullets.Length; i++)
         {
             if (bullets[i] != null && bullets[i].Source == BulletSource.Boss)
             {
                 bullets[i].Dead(false);
-                clearedCount++;
+                count++;
             }
         }
 
-        return clearedCount;
+        return count;
     }
 
-    public void InitInfo(BulletInfo info, BulletSource source = BulletSource.Normal, float speedMultiplier = 1f)
+    public void Init(BulletInfo info, BulletSource source = BulletSource.Normal, float speedRate = 1f)
     {
         this.info = info;
         Source = source;
-        fixedSpeedMultiplier = Mathf.Max(0f, speedMultiplier);
+        speedRate = Mathf.Max(0f, speedRate);
         time = 0f;
         isDead = false;
         CancelInvoke();
@@ -80,11 +81,11 @@ public class BulletObject : MonoBehaviour, IPoolableObject
 
         if (Application.isPlaying)
         {
-            Invoke("DealyDestroy", info.lifeTime);
+            Invoke("DealyDestroy", info.life);
         }
     }
 
-    private void DealyDestroy()
+    private void AutoDestroy()
     {
         Dead();
     }
@@ -94,21 +95,21 @@ public class BulletObject : MonoBehaviour, IPoolableObject
         Dead(true);
     }
 
-    public bool ClearByPlayer()
+    public bool PlayerClear()
     {
         if (isDead)
             return false;
 
         if (ScoreManager.Instance != null)
         {
-            ScoreManager.Instance.RegisterManualBulletClear();
+            ScoreManager.Instance.RegisterClear();
         }
 
         Dead();
         return true;
     }
 
-    public void Dead(bool spawnEffect)
+    public void Dead(bool showFx)
     {
         if (isDead)
             return;
@@ -116,10 +117,10 @@ public class BulletObject : MonoBehaviour, IPoolableObject
         isDead = true;
         CancelInvoke();
 
-        if (spawnEffect && info != null && !string.IsNullOrEmpty(info.deadEffRes))
+        if (showFx && info != null && !string.IsNullOrEmpty(info.deathFx))
         {
-            ObjectPoolManager.EnsureInstance().SpawnEffect(
-                info.deadEffRes,
+            ObjectPoolManager.Ensure().SpawnFx(
+                info.deathFx,
                 transform.position,
                 Quaternion.identity,
                 1f);
@@ -138,32 +139,32 @@ public class BulletObject : MonoBehaviour, IPoolableObject
         }
     }
 
-    public void OnPoolAcquire()
+    public void OnAcquire()
     {
         CancelInvoke();
         info = null;
         time = 0f;
         isDead = false;
         Source = BulletSource.Normal;
-        fixedSpeedMultiplier = 1f;
-        RegisterActiveBullet();
+        speedRate = 1f;
+        Register();
     }
 
-    public void OnPoolRelease()
+    public void OnRelease()
     {
         CancelInvoke();
         info = null;
         time = 0f;
         isDead = true;
         Source = BulletSource.Normal;
-        fixedSpeedMultiplier = 1f;
+        speedRate = 1f;
     }
 
-    private void RegisterActiveBullet()
+    private void Register()
     {
-        if (!allBullets.Contains(this))
+        if (!activeBullets.Contains(this))
         {
-            allBullets.Add(this);
+            activeBullets.Add(this);
         }
     }
 
@@ -189,30 +190,30 @@ public class BulletObject : MonoBehaviour, IPoolableObject
         if (info == null || isDead)
             return;
 
-        float difficultySpeed = Source == BulletSource.Boss
-            ? fixedSpeedMultiplier
-            : GameDataMgr.Instance.GetBulletSpeedMul();
-        float speedMul = difficultySpeed * PlayerObject.BulletSpeedScale;
-        transform.Translate(Vector3.forward * info.forwardSpeed * speedMul * Time.deltaTime);
+        float difficultyRate = Source == BulletSource.Boss
+            ? speedRate
+            : GameDataMgr.Instance.BulletSpeed();
+        float speed = difficultyRate * PlayerObject.BulletRate;
+        transform.Translate(Vector3.forward * info.moveRate * speed * Time.deltaTime);
 
         switch (info.type)
         {
             case 2:
                 time += Time.deltaTime;
-                transform.Translate(Vector3.right * Time.deltaTime * Mathf.Sin(time * info.roundSpeed) * info.rightSpeed);
+                transform.Translate(Vector3.right * Time.deltaTime * Mathf.Sin(time * info.turnSpeed) * info.sideSpeed);
                 break;
             case 3:
-                transform.rotation *= Quaternion.AngleAxis(info.roundSpeed * Time.deltaTime, Vector3.up);
+                transform.rotation *= Quaternion.AngleAxis(info.turnSpeed * Time.deltaTime, Vector3.up);
                 break;
             case 4:
-                transform.rotation *= Quaternion.AngleAxis(-info.roundSpeed * Time.deltaTime, Vector3.up);
+                transform.rotation *= Quaternion.AngleAxis(-info.turnSpeed * Time.deltaTime, Vector3.up);
                 break;
             case 5:
                 if (PlayerObject.Instance != null)
                 {
                     transform.rotation = Quaternion.Slerp(transform.rotation,
                         Quaternion.LookRotation(PlayerObject.Instance.transform.position - transform.position),
-                        info.roundSpeed * Time.deltaTime);
+                        info.turnSpeed * Time.deltaTime);
                 }
                 break;
         }

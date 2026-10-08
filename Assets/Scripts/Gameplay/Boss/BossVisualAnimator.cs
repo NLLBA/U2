@@ -1,103 +1,112 @@
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 [DisallowMultipleComponent]
-public sealed class BossVisualAnimator : MonoBehaviour, IPoolableObject
+public sealed class BossVisualAnimator : MonoBehaviour, IPoolable
 {
-    public Transform[] clockwiseParts = new Transform[0];
-    public Transform[] counterClockwiseParts = new Transform[0];
+    [FormerlySerializedAs("clockwiseParts")]
+    public Transform[] spinParts = new Transform[0];
+    [FormerlySerializedAs("counterClockwiseParts")]
+    public Transform[] reverseParts = new Transform[0];
     public Transform[] pulseParts = new Transform[0];
-    public float clockwiseSpeed = 35f;
-    public float counterClockwiseSpeed = 52f;
-    public float pulseFrequency = 1.4f;
-    [Range(0f, 0.25f)] public float pulseAmount = 0.06f;
+    [FormerlySerializedAs("clockwiseSpeed")]
+    public float spinSpeed = 35f;
+    [FormerlySerializedAs("counterClockwiseSpeed")]
+    public float reverseSpeed = 52f;
+    [FormerlySerializedAs("pulseFrequency")]
+    public float pulseRate = 1.4f;
+    [FormerlySerializedAs("pulseAmount")]
+    [Range(0f, 0.25f)] public float pulseSize = 0.06f;
 
-    private Quaternion[] clockwiseBaseRotations;
-    private Quaternion[] counterClockwiseBaseRotations;
-    private Vector3[] pulseBaseScales;
-    private float phaseOffset;
-    private bool poseCached;
+    private Quaternion[] spinPose;
+    private Quaternion[] reversePose;
+    private Vector3[] pulsePose;
+    private float phase;
+    private bool cached;
 
     private void Awake()
     {
-        CachePose();
+        Cache();
     }
 
     private void OnEnable()
     {
-        if (!poseCached)
+        if (!cached)
         {
-            CachePose();
+            Cache();
         }
     }
 
     private void Update()
     {
-        RotateParts(clockwiseParts, clockwiseSpeed * Time.deltaTime);
-        RotateParts(counterClockwiseParts, -counterClockwiseSpeed * Time.deltaTime);
+        Rotate(spinParts, spinSpeed * Time.deltaTime);
+        Rotate(reverseParts, -reverseSpeed * Time.deltaTime);
 
         float pulse = 1f + Mathf.Sin(
-            (Time.time + phaseOffset) * pulseFrequency * Mathf.PI * 2f) * pulseAmount;
-        int count = Mathf.Min(pulseParts.Length, pulseBaseScales.Length);
+            (Time.time + phase) * pulseRate * Mathf.PI * 2f) * pulseSize;
+        int count = Mathf.Min(pulseParts.Length, pulsePose.Length);
         for (int i = 0; i < count; i++)
         {
             if (pulseParts[i] != null)
             {
-                pulseParts[i].localScale = pulseBaseScales[i] * pulse;
+                pulseParts[i].localScale = pulsePose[i] * pulse;
             }
         }
     }
 
-    public void OnPoolAcquire()
+    public void OnAcquire()
     {
-        RestorePose();
-        phaseOffset = Random.Range(0f, 1f);
+        ResetPose();
+        phase = Random.Range(0f, 1f);
     }
 
-    public void OnPoolRelease()
+    public void OnRelease()
     {
-        RestorePose();
+        ResetPose();
     }
 
-    private void CachePose()
+    private void Cache()
     {
-        clockwiseParts = clockwiseParts ?? new Transform[0];
-        counterClockwiseParts = counterClockwiseParts ?? new Transform[0];
+        spinParts = spinParts ?? new Transform[0];
+        reverseParts = reverseParts ?? new Transform[0];
         pulseParts = pulseParts ?? new Transform[0];
 
-        clockwiseBaseRotations = CaptureRotations(clockwiseParts);
-        counterClockwiseBaseRotations = CaptureRotations(counterClockwiseParts);
-        pulseBaseScales = new Vector3[pulseParts.Length];
+        spinPose = ReadPose(spinParts);
+        reversePose = ReadPose(reverseParts);
+        pulsePose = new Vector3[pulseParts.Length];
         for (int i = 0; i < pulseParts.Length; i++)
         {
-            pulseBaseScales[i] = pulseParts[i] != null
+            pulsePose[i] = pulseParts[i] != null
                 ? pulseParts[i].localScale
                 : Vector3.one;
         }
 
-        poseCached = true;
+        cached = true;
     }
 
-    private void RestorePose()
+    private void ResetPose()
     {
-        if (!poseCached)
+        if (!cached)
         {
-            CachePose();
+            Cache();
         }
 
-        RestoreRotations(clockwiseParts, clockwiseBaseRotations);
-        RestoreRotations(counterClockwiseParts, counterClockwiseBaseRotations);
+        ApplyPose(spinParts, spinPose);
+        ApplyPose(reverseParts, reversePose);
 
-        int count = Mathf.Min(pulseParts.Length, pulseBaseScales.Length);
+        int count = Mathf.Min(pulseParts.Length, pulsePose.Length);
         for (int i = 0; i < count; i++)
         {
             if (pulseParts[i] != null)
             {
-                pulseParts[i].localScale = pulseBaseScales[i];
+                pulseParts[i].localScale = pulsePose[i];
             }
         }
     }
 
-    private static Quaternion[] CaptureRotations(Transform[] parts)
+    private static Quaternion[] ReadPose(Transform[] parts)
     {
         Quaternion[] rotations = new Quaternion[parts.Length];
         for (int i = 0; i < parts.Length; i++)
@@ -110,7 +119,7 @@ public sealed class BossVisualAnimator : MonoBehaviour, IPoolableObject
         return rotations;
     }
 
-    private static void RestoreRotations(Transform[] parts, Quaternion[] rotations)
+    private static void ApplyPose(Transform[] parts, Quaternion[] rotations)
     {
         int count = Mathf.Min(parts.Length, rotations.Length);
         for (int i = 0; i < count; i++)
@@ -122,7 +131,7 @@ public sealed class BossVisualAnimator : MonoBehaviour, IPoolableObject
         }
     }
 
-    private static void RotateParts(Transform[] parts, float angle)
+    private static void Rotate(Transform[] parts, float angle)
     {
         for (int i = 0; i < parts.Length; i++)
         {

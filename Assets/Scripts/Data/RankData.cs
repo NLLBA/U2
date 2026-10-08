@@ -1,38 +1,41 @@
+using System.Collections;
 using System.Collections.Generic;
+using UnityEngine;
 using System.Xml.Serialization;
 
 public class RankData
 {
-    public List<RankInfo> rankInfos = new List<RankInfo>();
+    [XmlArray("rankInfos")]
+    public List<RankInfo> ranks = new List<RankInfo>();
 
-    public void NormalizeAndSort(int maxEntries = 20)
+    public void Sort(int maxCount = 20)
     {
-        if (rankInfos == null)
+        if (ranks == null)
         {
-            rankInfos = new List<RankInfo>();
+            ranks = new List<RankInfo>();
         }
 
-        for (int i = rankInfos.Count - 1; i >= 0; i--)
+        for (int i = ranks.Count - 1; i >= 0; i--)
         {
-            if (rankInfos[i] == null)
+            if (ranks[i] == null)
             {
-                rankInfos.RemoveAt(i);
+                ranks.RemoveAt(i);
                 continue;
             }
 
-            rankInfos[i].Normalize();
+            ranks[i].Normalize();
         }
 
-        rankInfos.Sort(CompareRankInfo);
+        ranks.Sort(CompareRanks);
 
-        int safeMaxEntries = System.Math.Max(0, maxEntries);
-        if (rankInfos.Count > safeMaxEntries)
+        int limit = System.Math.Max(0, maxCount);
+        if (ranks.Count > limit)
         {
-            rankInfos.RemoveRange(safeMaxEntries, rankInfos.Count - safeMaxEntries);
+            ranks.RemoveRange(limit, ranks.Count - limit);
         }
     }
 
-    public static int CompareRankInfo(RankInfo left, RankInfo right)
+    public static int CompareRanks(RankInfo left, RankInfo right)
     {
         if (ReferenceEquals(left, right))
             return 0;
@@ -41,11 +44,11 @@ public class RankData
         if (right == null)
             return -1;
 
-        int scoreCompare = right.finalScore.CompareTo(left.finalScore);
+        int scoreCompare = right.score.CompareTo(left.score);
         if (scoreCompare != 0)
             return scoreCompare;
 
-        return right.survivalTime.CompareTo(left.survivalTime);
+        return right.runTime.CompareTo(left.runTime);
     }
 }
 
@@ -54,43 +57,40 @@ public class RankInfo
     [XmlAttribute]
     public string name;
 
-    // Kept for XML files written by versions before the score system.
+    // 旧版排行榜只保存 time，读取时仍需保留这个字段。
     [XmlAttribute]
     public int time;
 
-    [XmlAttribute]
-    public int finalScore;
+    [XmlAttribute("finalScore")]
+    public int score;
 
-    [XmlAttribute]
-    public int survivalTime;
+    [XmlAttribute("survivalTime")]
+    public int runTime;
 
     [XmlAttribute]
     public string difficulty;
 
-    [XmlAttribute]
-    public int bossRounds;
+    [XmlAttribute("bossRounds")]
+    public int bosses;
 
-    [XmlAttribute]
-    public int clearedBullets;
+    [XmlAttribute("clearedBullets")]
+    public int clears;
 
-    [XmlAttribute]
-    public string recordTime;
+    [XmlAttribute("recordTime")]
+    public string date;
 
     public void Normalize()
     {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            name = "Player";
-        }
+        name = string.IsNullOrWhiteSpace(name) ? "Player" : name.Trim();
 
         time = System.Math.Max(0, time);
-        finalScore = System.Math.Max(0, finalScore);
-        survivalTime = survivalTime > 0 ? survivalTime : time;
-        survivalTime = System.Math.Max(0, survivalTime);
-        time = survivalTime;
+        score = System.Math.Max(0, score);
+        runTime = runTime > 0 ? runTime : time;
+        runTime = System.Math.Max(0, runTime);
+        time = runTime;
         difficulty = string.IsNullOrWhiteSpace(difficulty) ? "普通" : difficulty;
-        bossRounds = System.Math.Max(0, bossRounds);
-        clearedBullets = System.Math.Max(0, clearedBullets);
-        recordTime = recordTime ?? string.Empty;
+        bosses = System.Math.Max(0, bosses);
+        clears = System.Math.Max(0, clears);
+        date = date ?? string.Empty;
     }
 }

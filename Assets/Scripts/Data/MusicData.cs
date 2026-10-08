@@ -1,15 +1,20 @@
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+using System.Xml.Serialization;
 
-public class MusicData 
+public class MusicData
 {
-    //±³¾°ÒôÀÖ´óĞ¡ 0~1
-    public float musicvalue = 0.5f;
-    //±³¾°ÒôÀÖ¿ª¹Ø
-    public bool musicIsopen = true;
-    //ÒôĞ§´óĞ¡ 0~1
-    public float soundValue = 0.5f;
-    //ÒôĞ§¿ª¹Ø
-    public bool SoundIsopen = true;
+    // èƒŒæ™¯éŸ³ä¹éŸ³é‡ï¼ŒèŒƒå›´ 0-1ã€‚
+    [XmlElement("musicvalue")]
+    public float musicVolume = 0.5f;
+
+    // èƒŒæ™¯éŸ³ä¹å¼€å…³ã€‚
+    [XmlElement("musicIsopen")]
+    public bool musicOn = true;
+
+    // éŸ³æ•ˆéŸ³é‡ï¼ŒèŒƒå›´ 0-1ã€‚
+    [XmlElement("soundValue")]
+    public float soundVolume = 0.5f;
+
+    // éŸ³æ•ˆå¼€å…³ã€‚
+    [XmlElement("SoundIsopen")]
+    public bool soundOn = true;
 }

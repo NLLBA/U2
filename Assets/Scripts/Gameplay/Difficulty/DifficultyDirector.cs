@@ -1,4 +1,7 @@
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public class DifficultyDirector : MonoBehaviour
 {
@@ -6,75 +9,85 @@ public class DifficultyDirector : MonoBehaviour
 
     public static DifficultyDirector Instance => instance;
 
-    private GameFlowManager flowManager;
+    private GameFlowManager flow;
 
-    [Min(1f)] public float threatStepSeconds = 30f;
-    [Min(0)] public int bossThreatLevelBonus = 2;
+    [FormerlySerializedAs("threatStepSeconds")]
+    [Min(1f)] public float threatStep = 30f;
+    [FormerlySerializedAs("bossThreatLevelBonus")]
+    [Min(0)] public int bossThreat = 2;
 
-    [Min(0f)] public float bulletSpeedGrowthPerLevel = 0.04f;
-    [Min(1f)] public float maxBulletSpeedMultiplier = 2.2f;
-    [Min(0f)] public float fireIntervalReductionPerLevel = 0.03f;
-    [Range(0.05f, 1f)] public float minFireIntervalMultiplier = 0.45f;
+    [FormerlySerializedAs("bulletSpeedGrowthPerLevel")]
+    [Min(0f)] public float bulletGrowth = 0.04f;
+    [FormerlySerializedAs("maxBulletSpeedMultiplier")]
+    [Min(1f)] public float maxBulletSpeed = 2.2f;
+    [FormerlySerializedAs("fireIntervalReductionPerLevel")]
+    [Min(0f)] public float fireDrop = 0.03f;
+    [FormerlySerializedAs("minFireIntervalMultiplier")]
+    [Range(0.05f, 1f)] public float minFireRate = 0.45f;
 
-    [Min(0f)] public float bossBulletSpeedGrowthPerRound = 0.12f;
-    [Min(1f)] public float maxBossBulletSpeedMultiplier = 2.5f;
-    [Min(0f)] public float bossFireIntervalReductionPerRound = 0.06f;
-    [Range(0.05f, 1f)] public float minBossFireIntervalMultiplier = 0.45f;
+    [FormerlySerializedAs("bossBulletSpeedGrowthPerRound")]
+    [Min(0f)] public float bossGrowth = 0.12f;
+    [FormerlySerializedAs("maxBossBulletSpeedMultiplier")]
+    [Min(1f)] public float maxBossSpeed = 2.5f;
+    [FormerlySerializedAs("bossFireIntervalReductionPerRound")]
+    [Min(0f)] public float bossFireDrop = 0.06f;
+    [FormerlySerializedAs("minBossFireIntervalMultiplier")]
+    [Range(0.05f, 1f)] public float minBossRate = 0.45f;
 
-    public int ThreatLevel => GetThreatGrowthSteps() + 1;
+    public int ThreatLevel => Growth() + 1;
 
-    public float NormalBulletSpeedMultiplier
+    public float BulletRate
     {
         get
         {
-            float multiplier = 1f + GetThreatGrowthSteps() * bulletSpeedGrowthPerLevel;
-            return Mathf.Min(multiplier, maxBulletSpeedMultiplier);
+            float rate = 1f + Growth() * bulletGrowth;
+            return Mathf.Min(rate, maxBulletSpeed);
         }
     }
 
-    public float NormalFireIntervalMultiplier
+    public float FireRate
     {
         get
         {
-            float multiplier = 1f - GetThreatGrowthSteps() * fireIntervalReductionPerLevel;
-            return Mathf.Max(multiplier, minFireIntervalMultiplier);
+            float rate = 1f - Growth() * fireDrop;
+            return Mathf.Max(rate, minFireRate);
         }
     }
 
-    public int ScalingBossRound
+    public int BossRound
     {
         get
         {
-            GameFlowManager flow = GetFlowManager();
+            GameFlowManager flow = GetFlow();
             if (flow == null)
                 return 1;
 
             if (flow.State == GameFlowState.BossSurvival)
-                return Mathf.Max(1, flow.CurrentBossRound);
+                return Mathf.Max(1, flow.BossRound);
 
-            return Mathf.Max(1, flow.CompletedBossRounds + 1);
+            return Mathf.Max(1, flow.BossRounds + 1);
         }
     }
 
-    public float BossBulletSpeedMultiplier
+    public float BossBulletRate
     {
         get
         {
-            float multiplier = 1f + (ScalingBossRound - 1) * bossBulletSpeedGrowthPerRound;
-            return Mathf.Min(multiplier, maxBossBulletSpeedMultiplier);
+            float rate = 1f + (BossRound - 1) * bossGrowth;
+            return Mathf.Min(rate, maxBossSpeed);
         }
     }
 
-    public float BossFireIntervalMultiplier
+    public float BossFireRate
     {
         get
         {
-            float multiplier = 1f - (ScalingBossRound - 1) * bossFireIntervalReductionPerRound;
-            return Mathf.Max(multiplier, minBossFireIntervalMultiplier);
+            float rate = 1f - (BossRound - 1) * bossFireDrop;
+            return Mathf.Max(rate, minBossRate);
         }
     }
 
-    public static DifficultyDirector EnsureInstance(GameObject host = null)
+    public static DifficultyDirector Ensure(GameObject host = null)
     {
         if (instance != null)
             return instance;
@@ -93,8 +106,8 @@ public class DifficultyDirector : MonoBehaviour
         }
 
         instance = this;
-        flowManager = GetComponent<GameFlowManager>();
-        ClampSettings();
+        flow = GetComponent<GameFlowManager>();
+        ClampValues();
     }
 
     private void OnDestroy()
@@ -107,61 +120,61 @@ public class DifficultyDirector : MonoBehaviour
 
     private void OnValidate()
     {
-        ClampSettings();
+        ClampValues();
     }
 
-    public float ApplyNormalBulletSpeed(float baseMultiplier)
+    public float ScaleBullet(float baseScale)
     {
-        return Mathf.Min(baseMultiplier * NormalBulletSpeedMultiplier, maxBulletSpeedMultiplier);
+        return Mathf.Min(baseScale * BulletRate, maxBulletSpeed);
     }
 
-    public float ApplyNormalFireInterval(float baseMultiplier)
+    public float ScaleFire(float baseScale)
     {
-        return baseMultiplier * NormalFireIntervalMultiplier;
+        return baseScale * FireRate;
     }
 
-    public float ApplyBossBulletSpeed(float baseMultiplier)
+    public float ScaleBossBullet(float baseScale)
     {
-        return Mathf.Min(baseMultiplier * BossBulletSpeedMultiplier, maxBossBulletSpeedMultiplier);
+        return Mathf.Min(baseScale * BossBulletRate, maxBossSpeed);
     }
 
-    public float ApplyBossFireInterval(float baseMultiplier)
+    public float ScaleBossFire(float baseScale)
     {
-        return Mathf.Max(baseMultiplier * BossFireIntervalMultiplier, minBossFireIntervalMultiplier);
+        return Mathf.Max(baseScale * BossFireRate, minBossRate);
     }
 
-    private int GetThreatGrowthSteps()
+    private int Growth()
     {
-        GameFlowManager flow = GetFlowManager();
+        GameFlowManager flow = GetFlow();
         if (flow == null)
             return 0;
 
-        int timeLevels = Mathf.FloorToInt(flow.SurvivalTime / threatStepSeconds);
-        int bossLevels = flow.CompletedBossRounds * bossThreatLevelBonus;
-        return Mathf.Max(0, timeLevels + bossLevels);
+        int timeLevel = Mathf.FloorToInt(flow.RunTime / threatStep);
+        int bossLevel = flow.BossRounds * bossThreat;
+        return Mathf.Max(0, timeLevel + bossLevel);
     }
 
-    private GameFlowManager GetFlowManager()
+    private GameFlowManager GetFlow()
     {
-        if (flowManager == null)
+        if (flow == null)
         {
-            flowManager = GetComponent<GameFlowManager>();
+            flow = GetComponent<GameFlowManager>();
         }
 
-        return flowManager != null ? flowManager : GameFlowManager.Instance;
+        return flow != null ? flow : GameFlowManager.Instance;
     }
 
-    private void ClampSettings()
+    private void ClampValues()
     {
-        threatStepSeconds = Mathf.Max(1f, threatStepSeconds);
-        bossThreatLevelBonus = Mathf.Max(0, bossThreatLevelBonus);
-        bulletSpeedGrowthPerLevel = Mathf.Max(0f, bulletSpeedGrowthPerLevel);
-        maxBulletSpeedMultiplier = Mathf.Max(1f, maxBulletSpeedMultiplier);
-        fireIntervalReductionPerLevel = Mathf.Max(0f, fireIntervalReductionPerLevel);
-        minFireIntervalMultiplier = Mathf.Clamp(minFireIntervalMultiplier, 0.05f, 1f);
-        bossBulletSpeedGrowthPerRound = Mathf.Max(0f, bossBulletSpeedGrowthPerRound);
-        maxBossBulletSpeedMultiplier = Mathf.Max(1f, maxBossBulletSpeedMultiplier);
-        bossFireIntervalReductionPerRound = Mathf.Max(0f, bossFireIntervalReductionPerRound);
-        minBossFireIntervalMultiplier = Mathf.Clamp(minBossFireIntervalMultiplier, 0.05f, 1f);
+        threatStep = Mathf.Max(1f, threatStep);
+        bossThreat = Mathf.Max(0, bossThreat);
+        bulletGrowth = Mathf.Max(0f, bulletGrowth);
+        maxBulletSpeed = Mathf.Max(1f, maxBulletSpeed);
+        fireDrop = Mathf.Max(0f, fireDrop);
+        minFireRate = Mathf.Clamp(minFireRate, 0.05f, 1f);
+        bossGrowth = Mathf.Max(0f, bossGrowth);
+        maxBossSpeed = Mathf.Max(1f, maxBossSpeed);
+        bossFireDrop = Mathf.Max(0f, bossFireDrop);
+        minBossRate = Mathf.Clamp(minBossRate, 0.05f, 1f);
     }
 }

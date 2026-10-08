@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Xml.Serialization;
 using UnityEngine;
@@ -16,13 +16,13 @@ public class XmlDataMgr
     /// </summary>
     /// <param name="data">数据对象</param>
     /// <param name="fileName">文件名</param>
-    public void SaveData(object data, string fileName)
+    public void Save(object data, string fileName)
     {
         string path = Path.Combine(Application.persistentDataPath, fileName + ".xml");
-        SaveDataToPath(data, path);
+        SavePath(data, path);
     }
 
-    public void SaveDataToPath(object data, string path)
+    public void SavePath(object data, string path)
     {
         if (data == null)
             throw new ArgumentNullException("data");
@@ -33,8 +33,8 @@ public class XmlDataMgr
             Directory.CreateDirectory(directory);
         }
 
-        string temporaryPath = path + ".tmp";
-        using (StreamWriter writer = new StreamWriter(temporaryPath, false))
+        string tempPath = path + ".tmp";
+        using (StreamWriter writer = new StreamWriter(tempPath, false))
         {
             XmlSerializer serializer = new XmlSerializer(data.GetType());
             serializer.Serialize(writer, data);
@@ -45,7 +45,7 @@ public class XmlDataMgr
             File.Delete(path);
         }
 
-        File.Move(temporaryPath, path);
+        File.Move(tempPath, path);
     }
 
     /// <summary>
@@ -54,58 +54,58 @@ public class XmlDataMgr
     /// <param name="type">对象类型</param>
     /// <param name="fileName">文件名</param>
     /// <returns></returns>
-    public object LoadData(Type type, string fileName)
+    public object Load(Type type, string fileName)
     {
-        string persistentPath = Path.Combine(Application.persistentDataPath, fileName + ".xml");
-        string fallbackPath = Path.Combine(Application.streamingAssetsPath, fileName + ".xml");
-        return LoadDataFromPaths(type, persistentPath, fallbackPath);
+        string dataPath = Path.Combine(Application.persistentDataPath, fileName + ".xml");
+        string defaultPath = Path.Combine(Application.streamingAssetsPath, fileName + ".xml");
+        return LoadPaths(type, dataPath, defaultPath);
     }
 
-    public object LoadDataFromPaths(Type type, string persistentPath, string fallbackPath)
+    public object LoadPaths(Type type, string dataPath, string defaultPath)
     {
         if (type == null)
             throw new ArgumentNullException("type");
 
-        if (File.Exists(persistentPath))
+        if (File.Exists(dataPath))
         {
-            object persistentData;
-            Exception persistentError;
-            if (TryDeserialize(type, persistentPath, out persistentData, out persistentError))
+            object savedData;
+            Exception readError;
+            if (TryRead(type, dataPath, out savedData, out readError))
             {
-                return persistentData;
+                return savedData;
             }
 
-            string backupPath = BackupCorruptFile(persistentPath);
-            Debug.LogWarning("XML data was corrupt and has been backed up to " + backupPath + ". " +
-                persistentError.Message);
+            string badPath = BackupFile(dataPath);
+            Debug.LogWarning("XML data was corrupt and has been backed up to " + badPath + ". " +
+                readError.Message);
 
-            object recoveredData = LoadFallbackOrDefault(type, fallbackPath);
-            TrySaveRecoveredData(recoveredData, persistentPath);
-            return recoveredData;
+            object restored = LoadDefault(type, defaultPath);
+            SaveCopy(restored, dataPath);
+            return restored;
         }
 
-        return LoadFallbackOrDefault(type, fallbackPath);
+        return LoadDefault(type, defaultPath);
     }
 
-    private object LoadFallbackOrDefault(Type type, string fallbackPath)
+    private object LoadDefault(Type type, string defaultPath)
     {
-        if (!string.IsNullOrEmpty(fallbackPath) && File.Exists(fallbackPath))
+        if (!string.IsNullOrEmpty(defaultPath) && File.Exists(defaultPath))
         {
-            object fallbackData;
-            Exception fallbackError;
-            if (TryDeserialize(type, fallbackPath, out fallbackData, out fallbackError))
+            object defaultData;
+            Exception defaultError;
+            if (TryRead(type, defaultPath, out defaultData, out defaultError))
             {
-                return fallbackData;
+                return defaultData;
             }
 
-            Debug.LogError("Default XML data could not be loaded: " + fallbackPath + ". " +
-                fallbackError.Message);
+            Debug.LogError("Default XML data could not be loaded: " + defaultPath + ". " +
+                defaultError.Message);
         }
 
         return Activator.CreateInstance(type);
     }
 
-    private bool TryDeserialize(Type type, string path, out object data, out Exception error)
+    private bool TryRead(Type type, string path, out object data, out Exception error)
     {
         try
         {
@@ -125,36 +125,36 @@ public class XmlDataMgr
         }
     }
 
-    private string BackupCorruptFile(string path)
+    private string BackupFile(string path)
     {
         string directory = Path.GetDirectoryName(path);
         string fileName = Path.GetFileNameWithoutExtension(path);
         string extension = Path.GetExtension(path);
         string timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmssfff");
-        string backupPath = Path.Combine(directory ?? string.Empty,
+        string badPath = Path.Combine(directory ?? string.Empty,
             fileName + ".corrupt-" + timestamp + extension);
         int suffix = 1;
 
-        while (File.Exists(backupPath))
+        while (File.Exists(badPath))
         {
-            backupPath = Path.Combine(directory ?? string.Empty,
+            badPath = Path.Combine(directory ?? string.Empty,
                 fileName + ".corrupt-" + timestamp + "-" + suffix + extension);
             suffix++;
         }
 
-        File.Move(path, backupPath);
-        return backupPath;
+        File.Move(path, badPath);
+        return badPath;
     }
 
-    private void TrySaveRecoveredData(object data, string persistentPath)
+    private void SaveCopy(object data, string dataPath)
     {
         try
         {
-            SaveDataToPath(data, persistentPath);
+            SavePath(data, dataPath);
         }
         catch (Exception ex)
         {
-            Debug.LogError("Recovered XML data could not be saved: " + persistentPath + ". " + ex.Message);
+            Debug.LogError("Recovered XML data could not be saved: " + dataPath + ". " + ex.Message);
         }
     }
 }

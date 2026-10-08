@@ -5,33 +5,33 @@ using System.Xml.Serialization;
 using NUnit.Framework;
 using UnityEngine;
 
-public class PlayerShieldVisualProfileTests
+public class ShieldStyleTests
 {
     [Test]
     public void FiveProfilesUseDistinctVisualLanguages()
     {
         HashSet<string> shellColors = new HashSet<string>();
         HashSet<int> ringCounts = new HashSet<int>();
-        HashSet<ShieldRotationPattern> rotationPatterns = new HashSet<ShieldRotationPattern>();
-        HashSet<ShieldPulsePattern> pulsePatterns = new HashSet<ShieldPulsePattern>();
+        HashSet<ShieldRotation> rotations = new HashSet<ShieldRotation>();
+        HashSet<ShieldPulse> pulses = new HashSet<ShieldPulse>();
         HashSet<int> energyNodeCounts = new HashSet<int>();
 
-        Assert.AreEqual(5, ShieldVisualProfileCatalog.Count);
-        for (int styleId = 1; styleId <= ShieldVisualProfileCatalog.Count; styleId++)
+        Assert.AreEqual(5, ShieldStyles.Count);
+        for (int styleId = 1; styleId <= ShieldStyles.Count; styleId++)
         {
-            ShieldVisualProfile profile = ShieldVisualProfileCatalog.Get(styleId);
-            Assert.AreEqual(styleId, profile.StyleId);
-            shellColors.Add(ColorKey(profile.ShellColor));
-            ringCounts.Add(profile.RingCount);
-            rotationPatterns.Add(profile.RotationPattern);
-            pulsePatterns.Add(profile.PulsePattern);
-            energyNodeCounts.Add(profile.EnergyNodeCount);
+            ShieldStyle style = ShieldStyles.Get(styleId);
+            Assert.AreEqual(styleId, style.Id);
+            shellColors.Add(ColorKey(style.ShellColor));
+            ringCounts.Add(style.RingCount);
+            rotations.Add(style.Rotation);
+            pulses.Add(style.Pulse);
+            energyNodeCounts.Add(style.NodeCount);
         }
 
         Assert.AreEqual(5, shellColors.Count);
         Assert.AreEqual(5, ringCounts.Count);
-        Assert.AreEqual(5, rotationPatterns.Count);
-        Assert.AreEqual(5, pulsePatterns.Count);
+        Assert.AreEqual(5, rotations.Count);
+        Assert.AreEqual(5, pulses.Count);
         Assert.AreEqual(5, energyNodeCounts.Count);
     }
 
@@ -48,26 +48,26 @@ public class PlayerShieldVisualProfileTests
         }
 
         Assert.IsNotNull(roleData);
-        Assert.AreEqual(5, roleData.roleDatas.Count);
-        for (int i = 0; i < roleData.roleDatas.Count; i++)
+        Assert.AreEqual(5, roleData.roles.Count);
+        for (int i = 0; i < roleData.roles.Count; i++)
         {
-            Assert.AreEqual(i + 1, roleData.roleDatas[i].shieldStyle);
-            Assert.AreEqual("Airplane/Airplane" + (i + 1), roleData.roleDatas[i].resName);
+            Assert.AreEqual(i + 1, roleData.roles[i].shieldId);
+            Assert.AreEqual("Airplane/Airplane" + (i + 1), roleData.roles[i].asset);
         }
     }
 
     [Test]
     public void PulsePatternsRemainWithinNormalizedRange()
     {
-        for (int styleId = 1; styleId <= ShieldVisualProfileCatalog.Count; styleId++)
+        for (int styleId = 1; styleId <= ShieldStyles.Count; styleId++)
         {
-            ShieldVisualProfile profile = ShieldVisualProfileCatalog.Get(styleId);
+            ShieldStyle style = ShieldStyles.Get(styleId);
             for (int sample = 0; sample <= 40; sample++)
             {
-                float pulse = ShieldVisualProfileCatalog.EvaluatePulse(
-                    profile.PulsePattern,
+                float pulse = ShieldStyles.EvalPulse(
+                    style.Pulse,
                     sample * 0.05f,
-                    profile.PulseFrequency,
+                    style.PulseRate,
                     0.17f);
                 Assert.That(pulse, Is.InRange(0f, 1f));
             }
@@ -84,15 +84,15 @@ public class PlayerShieldVisualProfileTests
         int expectedRingCount,
         int expectedNodeCount)
     {
-        int originalAircraftIndex = GameDataMgr.Instance.nowSelHeroIndex;
+        int originalAircraftIndex = GameDataMgr.Instance.heroIndex;
         GameObject aircraft = new GameObject("ShieldVisualStructureTest");
 
         try
         {
-            GameDataMgr.Instance.nowSelHeroIndex = aircraftIndex;
+            GameDataMgr.Instance.heroIndex = aircraftIndex;
             PlayerObject player = aircraft.AddComponent<PlayerObject>();
             MethodInfo createShield = typeof(PlayerObject).GetMethod(
-                "CreateShieldView",
+                "BuildShield",
                 BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.IsNotNull(createShield);
             createShield.Invoke(player, null);
@@ -115,7 +115,7 @@ public class PlayerShieldVisualProfileTests
         }
         finally
         {
-            GameDataMgr.Instance.nowSelHeroIndex = originalAircraftIndex;
+            GameDataMgr.Instance.heroIndex = originalAircraftIndex;
             Object.DestroyImmediate(aircraft);
         }
     }

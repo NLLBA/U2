@@ -53,8 +53,8 @@ public class EntryUIPolishTests
 
         Assert.AreEqual(1, roots.Length);
         Assert.AreEqual(UIRoot.Scaling.Constrained, roots[0].scalingStyle);
-        Assert.AreEqual(NGUIAspectSafeLayout.DefaultReferenceWidth, roots[0].manualWidth);
-        Assert.AreEqual(NGUIAspectSafeLayout.DefaultReferenceHeight, roots[0].manualHeight);
+        Assert.AreEqual(NGUIAspectSafeLayout.DefaultWidth, roots[0].manualWidth);
+        Assert.AreEqual(NGUIAspectSafeLayout.DefaultHeight, roots[0].manualHeight);
         Assert.IsNotNull(roots[0].GetComponent<NGUIAspectSafeLayout>());
 
         AssertPanelController<BeginPanel>(scene, "BeginPanel");
@@ -67,7 +67,7 @@ public class EntryUIPolishTests
     [Test]
     public void SafeAreaIsClampedAndConvertedToCameraViewport()
     {
-        Rect viewport = NGUIAspectSafeLayout.CalculateViewport(
+        Rect viewport = NGUIAspectSafeLayout.Viewport(
             2400, 1080, new Rect(120f, 24f, 2160f, 1032f));
         Assert.That(viewport.x, Is.EqualTo(0.05f).Within(0.0001f));
         Assert.That(viewport.y, Is.EqualTo(24f / 1080f).Within(0.0001f));
@@ -90,16 +90,16 @@ public class EntryUIPolishTests
     [Test]
     public void PerspectiveCameraFitsTheViewportAspectIndependentlyFromRootScale()
     {
-        const float referenceFieldOfView = 60f;
+        const float refFov = 60f;
         const float narrowAspect = 4f / 3f;
 
-        float narrowFieldOfView = NGUIAspectSafeLayout.CalculateVerticalFieldOfView(
-            referenceFieldOfView, 1920f / 1080f, narrowAspect);
-        Assert.Greater(narrowFieldOfView, referenceFieldOfView);
+        float narrowFieldOfView = NGUIAspectSafeLayout.VerticalFov(
+            refFov, 1920f / 1080f, narrowAspect);
+        Assert.Greater(narrowFieldOfView, refFov);
 
-        float wideFieldOfView = NGUIAspectSafeLayout.CalculateVerticalFieldOfView(
-            referenceFieldOfView, 1920f / 1080f, 21f / 9f);
-        Assert.That(wideFieldOfView, Is.EqualTo(referenceFieldOfView).Within(0.0001f));
+        float wideFieldOfView = NGUIAspectSafeLayout.VerticalFov(
+            refFov, 1920f / 1080f, 21f / 9f);
+        Assert.That(wideFieldOfView, Is.EqualTo(refFov).Within(0.0001f));
     }
 
     private static void AssertButton(Transform panel, UIButton button, string text, Vector2 expectedPosition,

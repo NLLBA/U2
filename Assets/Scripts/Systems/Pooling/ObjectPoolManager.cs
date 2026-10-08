@@ -1,21 +1,23 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
-public interface IPoolableObject
+public interface IPoolable
 {
-    void OnPoolAcquire();
-    void OnPoolRelease();
+    void OnAcquire();
+    void OnRelease();
 }
 
-public struct ObjectPoolStatistics
+public struct PoolStats
 {
-    public int SpawnRequests;
-    public int InstancesCreated;
-    public int InstancesReused;
+    public int SpawnCount;
+    public int NewCount;
+    public int ReuseCount;
     public int ActiveCount;
-    public int RecycleRequests;
+    public int ReleaseCount;
     public int InactiveCount;
-    public int DiscardedCount;
+    public int DropCount;
 }
 
 [DisallowMultipleComponent]
@@ -24,46 +26,46 @@ public sealed class PooledObject : MonoBehaviour
     internal ObjectPoolManager Owner;
     internal string PoolKey;
     internal bool IsSpawned;
-    internal Vector3 OriginalLocalScale;
+    internal Vector3 BaseScale;
 
-    public void ReleaseAfter(float delay)
+    public void ReleaseIn(float delay)
     {
-        CancelInvoke(nameof(ReleaseNow));
+        CancelInvoke(nameof(ReleaseSelf));
         if (delay <= 0f)
         {
-            ReleaseNow();
+            ReleaseSelf();
             return;
         }
 
-        Invoke(nameof(ReleaseNow), delay);
+        Invoke(nameof(ReleaseSelf), delay);
     }
 
-    internal void NotifyAcquire()
+    internal void OnGet()
     {
-        CancelInvoke(nameof(ReleaseNow));
-        IPoolableObject[] callbacks = GetComponents<IPoolableObject>();
+        CancelInvoke(nameof(ReleaseSelf));
+        IPoolable[] callbacks = GetComponents<IPoolable>();
         for (int i = 0; i < callbacks.Length; i++)
         {
-            callbacks[i].OnPoolAcquire();
+            callbacks[i].OnAcquire();
         }
     }
 
-    internal void NotifyRelease()
+    internal void OnPut()
     {
-        CancelInvoke(nameof(ReleaseNow));
-        IPoolableObject[] callbacks = GetComponents<IPoolableObject>();
+        CancelInvoke(nameof(ReleaseSelf));
+        IPoolable[] callbacks = GetComponents<IPoolable>();
         for (int i = 0; i < callbacks.Length; i++)
         {
-            callbacks[i].OnPoolRelease();
+            callbacks[i].OnRelease();
         }
     }
 
     private void OnDisable()
     {
-        CancelInvoke(nameof(ReleaseNow));
+        CancelInvoke(nameof(ReleaseSelf));
     }
 
-    private void ReleaseNow()
+    private void ReleaseSelf()
     {
         if (Owner != null)
         {
@@ -73,51 +75,51 @@ public sealed class PooledObject : MonoBehaviour
 }
 
 [DisallowMultipleComponent]
-public sealed class PooledEffectObject : MonoBehaviour, IPoolableObject
+public sealed class PooledEffect : MonoBehaviour, IPoolable
 {
-    private ParticleSystem[] particleSystems;
+    private ParticleSystem[] particles;
 
     public void Play(float lifetime)
     {
-        CacheParticleSystems();
-        RestartParticles();
+        Cache();
+        Restart();
 
         PooledObject pooledObject = GetComponent<PooledObject>();
         if (pooledObject != null)
         {
-            pooledObject.ReleaseAfter(lifetime);
+            pooledObject.ReleaseIn(lifetime);
         }
     }
 
-    public void OnPoolAcquire()
+    public void OnAcquire()
     {
-        CacheParticleSystems();
-        RestartParticles();
+        Cache();
+        Restart();
     }
 
-    public void OnPoolRelease()
+    public void OnRelease()
     {
-        CacheParticleSystems();
-        for (int i = 0; i < particleSystems.Length; i++)
+        Cache();
+        for (int i = 0; i < particles.Length; i++)
         {
-            particleSystems[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            particles[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         }
     }
 
-    private void CacheParticleSystems()
+    private void Cache()
     {
-        if (particleSystems == null)
+        if (particles == null)
         {
-            particleSystems = GetComponentsInChildren<ParticleSystem>(true);
+            particles = GetComponentsInChildren<ParticleSystem>(true);
         }
     }
 
-    private void RestartParticles()
+    private void Restart()
     {
-        for (int i = 0; i < particleSystems.Length; i++)
+        for (int i = 0; i < particles.Length; i++)
         {
-            particleSystems[i].Clear(true);
-            particleSystems[i].Play(true);
+            particles[i].Clear(true);
+            particles[i].Play(true);
         }
     }
 }
@@ -128,25 +130,28 @@ public class ObjectPoolManager : MonoBehaviour
 
     public static ObjectPoolManager Instance => instance;
 
-    [Min(1)] public int maxInactivePerResource = 512;
-    public bool poolingEnabled = true;
-    public bool logStatisticsOnDestroy;
+    [FormerlySerializedAs("maxInactivePerResource")]
+    [Min(1)] public int poolLimit = 512;
+    [FormerlySerializedAs("poolingEnabled")]
+    public bool usePool = true;
+    [FormerlySerializedAs("logStatisticsOnDestroy")]
+    public bool logStats;
 
     private readonly Dictionary<string, Stack<PooledObject>> pools =
         new Dictionary<string, Stack<PooledObject>>();
-    private readonly Dictionary<string, GameObject> resourceCache =
+    private readonly Dictionary<string, GameObject> cache =
         new Dictionary<string, GameObject>();
 
-    private Transform inactiveRoot;
-    private int spawnRequests;
-    private int instancesCreated;
-    private int instancesReused;
+    private Transform poolRoot;
+    private int spawnCount;
+    private int newCount;
+    private int reuseCount;
     private int activeCount;
-    private int recycleRequests;
+    private int releaseCount;
     private int inactiveCount;
-    private int discardedCount;
+    private int dropCount;
 
-    public static ObjectPoolManager EnsureInstance(GameObject host = null)
+    public static ObjectPoolManager Ensure(GameObject host = null)
     {
         if (instance != null)
             return instance;
@@ -160,18 +165,18 @@ public class ObjectPoolManager : MonoBehaviour
     {
         if (instance != null && instance != this)
         {
-            DestroyComponent(this);
+            DestroyNow(this);
             return;
         }
 
         instance = this;
-        maxInactivePerResource = Mathf.Max(1, maxInactivePerResource);
-        EnsureInactiveRoot();
+        poolLimit = Mathf.Max(1, poolLimit);
+        Root();
     }
 
     private void OnValidate()
     {
-        maxInactivePerResource = Mathf.Max(1, maxInactivePerResource);
+        poolLimit = Mathf.Max(1, poolLimit);
     }
 
     private void OnDestroy()
@@ -179,40 +184,40 @@ public class ObjectPoolManager : MonoBehaviour
         if (instance != this)
             return;
 
-        if (logStatisticsOnDestroy)
+        if (logStats)
         {
-            Debug.Log(FormatStatistics());
+            Debug.Log(StatsText());
         }
 
         instance = null;
     }
 
-    public GameObject SpawnResource(
-        string resourcePath,
+    public GameObject SpawnAsset(
+        string assetPath,
         Vector3 position,
         Quaternion rotation,
         Transform parent = null)
     {
-        if (string.IsNullOrEmpty(resourcePath))
+        if (string.IsNullOrEmpty(assetPath))
         {
             Debug.LogError("Cannot spawn an empty resource path.");
             return null;
         }
 
         GameObject prefab;
-        if (!resourceCache.TryGetValue(resourcePath, out prefab) || prefab == null)
+        if (!cache.TryGetValue(assetPath, out prefab) || prefab == null)
         {
-            prefab = Resources.Load<GameObject>(resourcePath);
-            resourceCache[resourcePath] = prefab;
+            prefab = Resources.Load<GameObject>(assetPath);
+            cache[assetPath] = prefab;
         }
 
         if (prefab == null)
         {
-            Debug.LogError("Pooled resource not found: " + resourcePath);
+            Debug.LogError("Pooled resource not found: " + assetPath);
             return null;
         }
 
-        return Spawn(prefab, "resource:" + resourcePath, position, rotation, parent);
+        return Spawn(prefab, "resource:" + assetPath, position, rotation, parent);
     }
 
     public GameObject Spawn(
@@ -225,12 +230,12 @@ public class ObjectPoolManager : MonoBehaviour
         if (prefab == null)
             return null;
 
-        string safeKey = string.IsNullOrEmpty(poolKey)
+        string key = string.IsNullOrEmpty(poolKey)
             ? "prefab:" + prefab.GetInstanceID()
             : poolKey;
 
-        spawnRequests++;
-        PooledObject pooledObject = TakeInactive(safeKey);
+        spawnCount++;
+        PooledObject pooledObject = Take(key);
         if (pooledObject == null)
         {
             GameObject created = Instantiate(prefab);
@@ -241,42 +246,42 @@ public class ObjectPoolManager : MonoBehaviour
             }
 
             pooledObject.Owner = this;
-            pooledObject.PoolKey = safeKey;
-            pooledObject.OriginalLocalScale = created.transform.localScale;
-            instancesCreated++;
+            pooledObject.PoolKey = key;
+            pooledObject.BaseScale = created.transform.localScale;
+            newCount++;
         }
         else
         {
-            instancesReused++;
+            reuseCount++;
         }
 
         Transform target = pooledObject.transform;
         target.SetParent(parent, false);
         target.position = position;
         target.rotation = rotation;
-        target.localScale = pooledObject.OriginalLocalScale;
+        target.localScale = pooledObject.BaseScale;
 
         pooledObject.IsSpawned = true;
         activeCount++;
         pooledObject.gameObject.SetActive(true);
-        pooledObject.NotifyAcquire();
+        pooledObject.OnGet();
         return pooledObject.gameObject;
     }
 
-    public GameObject SpawnEffect(
-        string resourcePath,
+    public GameObject SpawnFx(
+        string assetPath,
         Vector3 position,
         Quaternion rotation,
         float lifetime)
     {
-        GameObject effect = SpawnResource(resourcePath, position, rotation);
+        GameObject effect = SpawnAsset(assetPath, position, rotation);
         if (effect == null)
             return null;
 
-        PooledEffectObject pooledEffect = effect.GetComponent<PooledEffectObject>();
+        PooledEffect pooledEffect = effect.GetComponent<PooledEffect>();
         if (pooledEffect == null)
         {
-            pooledEffect = effect.AddComponent<PooledEffectObject>();
+            pooledEffect = effect.AddComponent<PooledEffect>();
         }
 
         pooledEffect.Play(Mathf.Max(0f, lifetime));
@@ -293,24 +298,24 @@ public class ObjectPoolManager : MonoBehaviour
             return false;
 
         pooledObject.IsSpawned = false;
-        pooledObject.NotifyRelease();
-        recycleRequests++;
+        pooledObject.OnPut();
+        releaseCount++;
         activeCount = Mathf.Max(0, activeCount - 1);
 
-        Stack<PooledObject> pool = GetOrCreatePool(pooledObject.PoolKey);
-        if (!poolingEnabled || pool.Count >= maxInactivePerResource)
+        Stack<PooledObject> pool = GetPool(pooledObject.PoolKey);
+        if (!usePool || pool.Count >= poolLimit)
         {
-            discardedCount++;
-            DestroyObject(target);
+            dropCount++;
+            DestroyNow(target);
             return true;
         }
 
         target.SetActive(false);
-        Transform targetTransform = target.transform;
-        targetTransform.SetParent(EnsureInactiveRoot(), false);
-        targetTransform.localPosition = Vector3.zero;
-        targetTransform.localRotation = Quaternion.identity;
-        targetTransform.localScale = pooledObject.OriginalLocalScale;
+        Transform targetRoot = target.transform;
+        targetRoot.SetParent(Root(), false);
+        targetRoot.localPosition = Vector3.zero;
+        targetRoot.localRotation = Quaternion.identity;
+        targetRoot.localScale = pooledObject.BaseScale;
         pool.Push(pooledObject);
         inactiveCount++;
         return true;
@@ -325,7 +330,7 @@ public class ObjectPoolManager : MonoBehaviour
         return pooledObject != null && pooledObject.Owner != null && pooledObject.Owner.Release(target);
     }
 
-    public void ClearInactive()
+    public void ClearPool()
     {
         foreach (KeyValuePair<string, Stack<PooledObject>> pair in pools)
         {
@@ -335,7 +340,7 @@ public class ObjectPoolManager : MonoBehaviour
                 PooledObject pooledObject = pool.Pop();
                 if (pooledObject != null)
                 {
-                    DestroyObject(pooledObject.gameObject);
+                    DestroyNow(pooledObject.gameObject);
                 }
             }
         }
@@ -344,45 +349,45 @@ public class ObjectPoolManager : MonoBehaviour
         inactiveCount = 0;
     }
 
-    public void ResetStatistics()
+    public void ResetStats()
     {
-        spawnRequests = 0;
-        instancesCreated = 0;
-        instancesReused = 0;
-        recycleRequests = 0;
-        discardedCount = 0;
+        spawnCount = 0;
+        newCount = 0;
+        reuseCount = 0;
+        releaseCount = 0;
+        dropCount = 0;
     }
 
-    public ObjectPoolStatistics GetStatistics()
+    public PoolStats Stats()
     {
-        return new ObjectPoolStatistics
+        return new PoolStats
         {
-            SpawnRequests = spawnRequests,
-            InstancesCreated = instancesCreated,
-            InstancesReused = instancesReused,
+            SpawnCount = spawnCount,
+            NewCount = newCount,
+            ReuseCount = reuseCount,
             ActiveCount = activeCount,
-            RecycleRequests = recycleRequests,
+            ReleaseCount = releaseCount,
             InactiveCount = inactiveCount,
-            DiscardedCount = discardedCount,
+            DropCount = dropCount,
         };
     }
 
-    public string FormatStatistics()
+    public string StatsText()
     {
-        ObjectPoolStatistics stats = GetStatistics();
-        return "ObjectPool requests=" + stats.SpawnRequests +
-            " created=" + stats.InstancesCreated +
-            " reused=" + stats.InstancesReused +
+        PoolStats stats = Stats();
+        return "ObjectPool requests=" + stats.SpawnCount +
+            " created=" + stats.NewCount +
+            " reused=" + stats.ReuseCount +
             " active=" + stats.ActiveCount +
-            " recycled=" + stats.RecycleRequests +
+            " recycled=" + stats.ReleaseCount +
             " inactive=" + stats.InactiveCount +
-            " discarded=" + stats.DiscardedCount;
+            " discarded=" + stats.DropCount;
     }
 
-    private PooledObject TakeInactive(string poolKey)
+    private PooledObject Take(string poolKey)
     {
         Stack<PooledObject> pool;
-        if (!poolingEnabled || !pools.TryGetValue(poolKey, out pool))
+        if (!usePool || !pools.TryGetValue(poolKey, out pool))
             return null;
 
         while (pool.Count > 0)
@@ -398,7 +403,7 @@ public class ObjectPoolManager : MonoBehaviour
         return null;
     }
 
-    private Stack<PooledObject> GetOrCreatePool(string poolKey)
+    private Stack<PooledObject> GetPool(string poolKey)
     {
         Stack<PooledObject> pool;
         if (!pools.TryGetValue(poolKey, out pool))
@@ -410,19 +415,19 @@ public class ObjectPoolManager : MonoBehaviour
         return pool;
     }
 
-    private Transform EnsureInactiveRoot()
+    private Transform Root()
     {
-        if (inactiveRoot != null)
-            return inactiveRoot;
+        if (poolRoot != null)
+            return poolRoot;
 
         GameObject root = new GameObject("ObjectPool_Inactive");
         root.transform.SetParent(transform, false);
         root.SetActive(false);
-        inactiveRoot = root.transform;
-        return inactiveRoot;
+        poolRoot = root.transform;
+        return poolRoot;
     }
 
-    private static void DestroyObject(GameObject target)
+    private static void DestroyNow(GameObject target)
     {
         if (target == null)
             return;
@@ -437,7 +442,7 @@ public class ObjectPoolManager : MonoBehaviour
         }
     }
 
-    private static void DestroyComponent(Component target)
+    private static void DestroyNow(Component target)
     {
         if (target == null)
             return;

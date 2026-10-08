@@ -1,5 +1,7 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public class GamePanel : BasePanel<GamePanel>
 {
@@ -9,7 +11,8 @@ public class GamePanel : BasePanel<GamePanel>
     public UILabel labDifficulty;
     public UILabel labSkill;
     public UILabel labShieldIcon;
-    public UILabel labHeroSkillIcon;
+    [FormerlySerializedAs("labHeroSkillIcon")]
+    public UILabel labSkillIcon;
     public UILabel labBossWarning;
 
     public List<GameObject> hpObjs;
@@ -22,7 +25,7 @@ public class GamePanel : BasePanel<GamePanel>
         {
             btnBack.onClick.Add(new EventDelegate(() =>
             {
-                ShowPauseMenu();
+                ShowPause();
             }));
         }
 
@@ -49,23 +52,23 @@ public class GamePanel : BasePanel<GamePanel>
 
     private void Update()
     {
-        HandlePauseInput();
+        CheckPause();
 
         if (GameFlowManager.Instance != null)
         {
-            nowTime = GameFlowManager.Instance.SurvivalTime;
+            nowTime = GameFlowManager.Instance.RunTime;
         }
         else
         {
             nowTime += Time.deltaTime;
         }
 
-        UpdateTimeText();
-        UpdateFeatureText();
-        UpdateBossWarning();
+        UpdateTime();
+        UpdateInfo();
+        UpdateBoss();
     }
 
-    private void HandlePauseInput()
+    private void CheckPause()
     {
         if (!Input.GetKeyDown(KeyCode.Escape) || QuitPanel.Instance == null)
             return;
@@ -75,15 +78,15 @@ public class GamePanel : BasePanel<GamePanel>
 
         if (QuitPanel.Instance.gameObject.activeSelf)
         {
-            QuitPanel.Instance.ResumeGame();
+            QuitPanel.Instance.Resume();
         }
         else
         {
-            ShowPauseMenu();
+            ShowPause();
         }
     }
 
-    private void ShowPauseMenu()
+    private void ShowPause()
     {
         if (QuitPanel.Instance == null)
             return;
@@ -92,7 +95,7 @@ public class GamePanel : BasePanel<GamePanel>
 
         if (GameFlowManager.Instance != null)
         {
-            GameFlowManager.Instance.PauseGame();
+            GameFlowManager.Instance.Pause();
         }
         else
         {
@@ -100,7 +103,7 @@ public class GamePanel : BasePanel<GamePanel>
         }
     }
 
-    private void UpdateTimeText()
+    private void UpdateTime()
     {
         labTime.text = "";
 
@@ -115,29 +118,29 @@ public class GamePanel : BasePanel<GamePanel>
         labTime.text += (int)nowTime % 60 + "s";
     }
 
-    private void UpdateFeatureText()
+    private void UpdateInfo()
     {
         if (labLevel != null)
         {
-            labLevel.text = GameDataMgr.Instance.GetLevelName();
+            labLevel.text = GameDataMgr.Instance.LevelName();
             if (GameFlowManager.Instance != null)
             {
-                labLevel.text += "  |  " + GameFlowManager.Instance.GetStatusText();
+                labLevel.text += "  |  " + GameFlowManager.Instance.StatusText();
                 if (GameFlowManager.Instance.State == GameFlowState.BossSurvival &&
-                    BossController.Instance != null && BossController.Instance.IsBossActive)
+                    BossController.Instance != null && BossController.Instance.BossActive)
                 {
-                    labLevel.text += "  |  弹幕：" + BossController.Instance.GetPatternName();
+                    labLevel.text += "  |  弹幕：" + BossController.Instance.PatternName();
                 }
             }
         }
 
         if (labDifficulty != null)
         {
-            labDifficulty.text = "难度：" + GameDataMgr.Instance.GetDifficultyName();
+            labDifficulty.text = "难度：" + GameDataMgr.Instance.DifficultyName();
             if (ScoreManager.Instance != null)
             {
-                labDifficulty.text += "  |  威胁：" + ScoreManager.Instance.CurrentThreatLevel +
-                    "  |  分数：" + ScoreManager.Instance.FinalScore;
+                labDifficulty.text += "  |  威胁：" + ScoreManager.Instance.Threat +
+                    "  |  分数：" + ScoreManager.Instance.TotalScore;
             }
             else if (DifficultyDirector.Instance != null)
             {
@@ -150,21 +153,21 @@ public class GamePanel : BasePanel<GamePanel>
 
         if (labSkill != null)
         {
-            labSkill.text = PlayerObject.Instance.GetSkillText();
+            labSkill.text = PlayerObject.Instance.SkillText();
         }
 
         if (labShieldIcon != null)
         {
-            labShieldIcon.text = PlayerObject.Instance.GetShieldIconText();
+            labShieldIcon.text = PlayerObject.Instance.ShieldIcon();
         }
 
-        if (labHeroSkillIcon != null)
+        if (labSkillIcon != null)
         {
-            labHeroSkillIcon.text = PlayerObject.Instance.GetHeroSkillIconText();
+            labSkillIcon.text = PlayerObject.Instance.SkillIconText();
         }
     }
 
-    private void UpdateBossWarning()
+    private void UpdateBoss()
     {
         if (labBossWarning == null)
             return;
@@ -181,10 +184,10 @@ public class GamePanel : BasePanel<GamePanel>
         if (!shouldShow)
             return;
 
-        int seconds = Mathf.CeilToInt(flow.GetCurrentCountdown());
+        int seconds = Mathf.CeilToInt(flow.Countdown());
         if (flow.State == GameFlowState.BossWarning)
         {
-            labBossWarning.text = "BOSS 接近  第" + (flow.CompletedBossRounds + 1) + "轮  " + seconds + "秒";
+            labBossWarning.text = "BOSS 接近  第" + (flow.BossRounds + 1) + "轮  " + seconds + "秒";
             float pulse = 1f + Mathf.Sin(Time.unscaledTime * 10f) * 0.08f;
             labBossWarning.transform.localScale = Vector3.one * pulse;
             labBossWarning.color = Color.Lerp(
@@ -194,7 +197,7 @@ public class GamePanel : BasePanel<GamePanel>
         }
         else
         {
-            labBossWarning.text = "第" + flow.CurrentBossRound + "轮 BOSS  坚持 " + seconds + "秒";
+            labBossWarning.text = "第" + flow.BossRound + "轮 BOSS  坚持 " + seconds + "秒";
             labBossWarning.transform.localScale = Vector3.one;
             labBossWarning.color = new Color(1f, 0.72f, 0.16f, 1f);
         }

@@ -1,3 +1,5 @@
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class DifficultySelectButton : MonoBehaviour
@@ -22,7 +24,7 @@ public class DifficultySelectButton : MonoBehaviour
     {
         if (statusLabel != null)
         {
-            statusLabel.text = "当前难度：" + GameDataMgr.Instance.GetDifficultyName();
+            statusLabel.text = "当前难度：" + GameDataMgr.Instance.DifficultyName();
         }
     }
 }

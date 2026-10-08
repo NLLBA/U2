@@ -12,7 +12,7 @@ public class BossControllerTests
     public void SetUp()
     {
         Time.timeScale = 1f;
-        FireObject.SetGlobalIntensityScale(1f);
+        FireObject.SetIntensity(1f);
 
         host = new GameObject("BossControllerTests");
         flow = host.AddComponent<GameFlowManager>();
@@ -21,20 +21,20 @@ public class BossControllerTests
         InvokeAwake(flow);
         InvokeAwake(director);
         InvokeAwake(controller);
-        controller.bossVisualResource = string.Empty;
+        controller.bossPath = string.Empty;
 
-        flow.firstBossTime = 10f;
-        flow.bossWarningTime = 2f;
-        flow.bossDuration = 4f;
-        flow.normalInterval = 5f;
-        flow.ResetFlow();
+        flow.bossStart = 10f;
+        flow.warnTime = 2f;
+        flow.bossTime = 4f;
+        flow.bossGap = 5f;
+        flow.Reset();
     }
 
     [TearDown]
     public void TearDown()
     {
         Time.timeScale = 1f;
-        FireObject.SetGlobalIntensityScale(1f);
+        FireObject.SetIntensity(1f);
         if (host != null)
         {
             Object.DestroyImmediate(host);
@@ -44,75 +44,75 @@ public class BossControllerTests
     [Test]
     public void BossLifecycleReducesNormalFireAndClearsBossBullets()
     {
-        flow.AdvanceFlow(8f);
+        flow.Advance(8f);
         Assert.AreEqual(GameFlowState.BossWarning, flow.State);
-        Assert.AreEqual(0.25f, FireObject.GlobalIntensityScale, 0.001f);
+        Assert.AreEqual(0.25f, FireObject.Intensity, 0.001f);
 
-        flow.AdvanceFlow(2f);
-        Assert.IsTrue(controller.IsBossActive);
-        Assert.AreEqual(1, controller.ActiveRound);
+        flow.Advance(2f);
+        Assert.IsTrue(controller.BossActive);
+        Assert.AreEqual(1, controller.BossRound);
 
         GameObject bullet = new GameObject("BossBulletTest");
         BulletObject bulletObject = bullet.AddComponent<BulletObject>();
-        bulletObject.OnPoolAcquire();
-        bulletObject.InitInfo(new BulletInfo { lifeTime = 30f }, BulletSource.Boss, 1f);
+        bulletObject.OnAcquire();
+        bulletObject.Init(new BulletInfo { life = 30f }, BulletSource.Boss, 1f);
 
-        flow.AdvanceFlow(4f);
+        flow.Advance(4f);
         Assert.AreEqual(GameFlowState.Normal, flow.State);
-        Assert.AreEqual(1, flow.CompletedBossRounds);
-        Assert.IsFalse(controller.IsBossActive);
-        Assert.AreEqual(1f, FireObject.GlobalIntensityScale, 0.001f);
+        Assert.AreEqual(1, flow.BossRounds);
+        Assert.IsFalse(controller.BossActive);
+        Assert.AreEqual(1f, FireObject.Intensity, 0.001f);
         Assert.IsTrue(bullet == null);
     }
 
     [Test]
     public void PauseKeepsTheActiveBossAndRound()
     {
-        flow.AdvanceFlow(10f);
-        Assert.IsTrue(controller.IsBossActive);
+        flow.Advance(10f);
+        Assert.IsTrue(controller.BossActive);
 
-        flow.PauseGame();
+        flow.Pause();
         Assert.AreEqual(GameFlowState.Paused, flow.State);
-        Assert.IsTrue(controller.IsBossActive);
-        Assert.AreEqual(1, controller.ActiveRound);
+        Assert.IsTrue(controller.BossActive);
+        Assert.AreEqual(1, controller.BossRound);
 
-        flow.ResumeGame();
+        flow.Resume();
         Assert.AreEqual(GameFlowState.BossSurvival, flow.State);
-        Assert.IsTrue(controller.IsBossActive);
+        Assert.IsTrue(controller.BossActive);
     }
 
     [Test]
     public void BossUsesFourPhasesAndLaterRoundsAddBullets()
     {
-        Assert.AreEqual(BossAttackPattern.Fan, controller.GetPatternAtNormalizedTime(0f));
-        Assert.AreEqual(BossAttackPattern.Spiral, controller.GetPatternAtNormalizedTime(0.25f));
-        Assert.AreEqual(BossAttackPattern.Cross, controller.GetPatternAtNormalizedTime(0.5f));
-        Assert.AreEqual(BossAttackPattern.Homing, controller.GetPatternAtNormalizedTime(0.75f));
+        Assert.AreEqual(BossAttackPattern.Fan, controller.PatternAt(0f));
+        Assert.AreEqual(BossAttackPattern.Spiral, controller.PatternAt(0.25f));
+        Assert.AreEqual(BossAttackPattern.Cross, controller.PatternAt(0.5f));
+        Assert.AreEqual(BossAttackPattern.Homing, controller.PatternAt(0.75f));
 
         Assert.Greater(
-            controller.GetPrimaryVolleyBulletCount(BossAttackPattern.Fan, 3),
-            controller.GetPrimaryVolleyBulletCount(BossAttackPattern.Fan, 1));
+            controller.VolleySize(BossAttackPattern.Fan, 3),
+            controller.VolleySize(BossAttackPattern.Fan, 1));
         Assert.Greater(
-            controller.GetPrimaryVolleyBulletCount(BossAttackPattern.Homing, 3),
-            controller.GetPrimaryVolleyBulletCount(BossAttackPattern.Homing, 1));
+            controller.VolleySize(BossAttackPattern.Homing, 3),
+            controller.VolleySize(BossAttackPattern.Homing, 1));
     }
 
     [Test]
     public void BossVisualsCycleAcrossRoundsAndKeepFallbackSupport()
     {
-        controller.bossVisualResource = "Airplane/Airplane5";
-        controller.bossVisualResources = new[] { "Bosses/A", "Bosses/B", "Bosses/C" };
+        controller.bossPath = "Airplane/Airplane5";
+        controller.bossPaths = new[] { "Bosses/A", "Bosses/B", "Bosses/C" };
 
-        Assert.AreEqual("Bosses/A", controller.GetBossVisualResource(1));
-        Assert.AreEqual("Bosses/B", controller.GetBossVisualResource(2));
-        Assert.AreEqual("Bosses/C", controller.GetBossVisualResource(3));
-        Assert.AreEqual("Bosses/A", controller.GetBossVisualResource(4));
+        Assert.AreEqual("Bosses/A", controller.BossPath(1));
+        Assert.AreEqual("Bosses/B", controller.BossPath(2));
+        Assert.AreEqual("Bosses/C", controller.BossPath(3));
+        Assert.AreEqual("Bosses/A", controller.BossPath(4));
 
-        controller.bossVisualResources = new string[0];
-        Assert.AreEqual("Airplane/Airplane5", controller.GetBossVisualResource(2));
+        controller.bossPaths = new string[0];
+        Assert.AreEqual("Airplane/Airplane5", controller.BossPath(2));
 
-        controller.bossVisualResource = string.Empty;
-        Assert.AreEqual(string.Empty, controller.GetBossVisualResource(1));
+        controller.bossPath = string.Empty;
+        Assert.AreEqual(string.Empty, controller.BossPath(1));
     }
 
     [Test]
@@ -136,8 +136,8 @@ public class BossControllerTests
             Assert.AreEqual(1, prefab.GetComponentsInChildren<Light>(true).Length);
             Assert.AreEqual(0, prefab.GetComponentsInChildren<Collider>(true).Length);
             Assert.Greater(
-                animator.clockwiseParts.Length +
-                animator.counterClockwiseParts.Length +
+                animator.spinParts.Length +
+                animator.reverseParts.Length +
                 animator.pulseParts.Length,
                 0,
                 "Boss visual has no animated parts: " + resourcePaths[i]);

@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public class ScoreManager : MonoBehaviour
 {
@@ -7,30 +8,36 @@ public class ScoreManager : MonoBehaviour
 
     public static ScoreManager Instance => instance;
 
-    [Min(0)] public int survivalPointsPerSecond = 10;
-    [Min(0)] public int manualClearPoints = 25;
-    [Min(0)] public int bossRoundBaseReward = 1000;
-    [Min(0.01f)] public float easyDifficultyCoefficient = 1f;
-    [Min(0.01f)] public float normalDifficultyCoefficient = 1.25f;
-    [Min(0.01f)] public float hardDifficultyCoefficient = 1.6f;
+    [FormerlySerializedAs("survivalPointsPerSecond")]
+    [Min(0)] public int timePoints = 10;
+    [FormerlySerializedAs("manualClearPoints")]
+    [Min(0)] public int clearPoints = 25;
+    [FormerlySerializedAs("bossRoundBaseReward")]
+    [Min(0)] public int bossPoints = 1000;
+    [FormerlySerializedAs("easyDifficultyCoefficient")]
+    [Min(0.01f)] public float easyRate = 1f;
+    [FormerlySerializedAs("normalDifficultyCoefficient")]
+    [Min(0.01f)] public float normalRate = 1.25f;
+    [FormerlySerializedAs("hardDifficultyCoefficient")]
+    [Min(0.01f)] public float hardRate = 1.6f;
 
-    public float SurvivalTime { get; private set; }
-    public int SurvivalScore { get; private set; }
-    public int ManualClearedBullets { get; private set; }
-    public int ManualClearScore { get; private set; }
-    public int CurrentThreatLevel { get; private set; }
-    public int CompletedBossRounds { get; private set; }
-    public int BossStageReward { get; private set; }
-    public float DifficultyCoefficient { get; private set; }
-    public int FinalScore { get; private set; }
-    public bool IsFinalized { get; private set; }
+    public float RunTime { get; private set; }
+    public int TimeScore { get; private set; }
+    public int ClearCount { get; private set; }
+    public int ClearScore { get; private set; }
+    public int Threat { get; private set; }
+    public int BossRounds { get; private set; }
+    public int BossScore { get; private set; }
+    public float ScoreRate { get; private set; }
+    public int TotalScore { get; private set; }
+    public bool Finished { get; private set; }
 
-    public event Action<int> ScoreChanged;
+    public event Action<int> ScoreUpdated;
 
-    private GameFlowManager flowManager;
-    private DifficultyDirector difficultyDirector;
+    private GameFlowManager flow;
+    private DifficultyDirector director;
 
-    public static ScoreManager EnsureInstance(GameObject host = null)
+    public static ScoreManager Ensure(GameObject host = null)
     {
         if (instance != null)
             return instance;
@@ -44,14 +51,14 @@ public class ScoreManager : MonoBehaviour
     {
         if (instance != null && instance != this)
         {
-            DestroyComponent(this);
+            DestroyNow(this);
             return;
         }
 
         instance = this;
-        ClampSettings();
-        BindDependencies();
-        ResetScore();
+        ClampValues();
+        Bind();
+        Reset();
     }
 
     private void OnDestroy()
@@ -59,9 +66,9 @@ public class ScoreManager : MonoBehaviour
         if (instance != this)
             return;
 
-        if (flowManager != null)
+        if (flow != null)
         {
-            flowManager.StateChanged -= HandleFlowStateChanged;
+            flow.StateUpdated -= OnFlowState;
         }
 
         instance = null;
@@ -69,102 +76,102 @@ public class ScoreManager : MonoBehaviour
 
     private void OnValidate()
     {
-        ClampSettings();
+        ClampValues();
     }
 
     private void Update()
     {
-        if (flowManager == null || difficultyDirector == null)
+        if (flow == null || director == null)
         {
-            BindDependencies();
+            Bind();
         }
 
-        RecalculateScore();
+        UpdateScore();
     }
 
-    public void ResetScore()
+    public void Reset()
     {
-        SurvivalTime = 0f;
-        SurvivalScore = 0;
-        ManualClearedBullets = 0;
-        ManualClearScore = 0;
-        CurrentThreatLevel = 1;
-        CompletedBossRounds = 0;
-        BossStageReward = 0;
-        DifficultyCoefficient = GetDifficultyCoefficient(GetCurrentDifficultyId());
-        FinalScore = 0;
-        IsFinalized = false;
-        RecalculateScore();
+        RunTime = 0f;
+        TimeScore = 0;
+        ClearCount = 0;
+        ClearScore = 0;
+        Threat = 1;
+        BossRounds = 0;
+        BossScore = 0;
+        ScoreRate = RateFor(DifficultyId());
+        TotalScore = 0;
+        Finished = false;
+        UpdateScore();
     }
 
-    public bool RegisterManualBulletClear()
+    public bool RegisterClear()
     {
-        if (IsFinalized)
+        if (Finished)
             return false;
 
-        ManualClearedBullets++;
-        RecalculateScore();
+        ClearCount++;
+        UpdateScore();
         return true;
     }
 
-    public void RecalculateScore()
+    public void UpdateScore()
     {
-        if (IsFinalized)
+        if (Finished)
             return;
 
-        int previousScore = FinalScore;
-        GameFlowManager flow = GetFlowManager();
-        DifficultyDirector director = GetDifficultyDirector();
+        int oldScore = TotalScore;
+        GameFlowManager flow = GetFlow();
+        DifficultyDirector activeDirector = Director();
 
-        SurvivalTime = flow != null ? Mathf.Max(0f, flow.SurvivalTime) : 0f;
-        CompletedBossRounds = flow != null ? Mathf.Max(0, flow.CompletedBossRounds) : 0;
-        CurrentThreatLevel = director != null ? Mathf.Max(1, director.ThreatLevel) : 1;
-        DifficultyCoefficient = GetDifficultyCoefficient(GetCurrentDifficultyId());
+        RunTime = flow != null ? Mathf.Max(0f, flow.RunTime) : 0f;
+        BossRounds = flow != null ? Mathf.Max(0, flow.BossRounds) : 0;
+        Threat = activeDirector != null ? Mathf.Max(1, activeDirector.ThreatLevel) : 1;
+        ScoreRate = RateFor(DifficultyId());
 
-        SurvivalScore = ClampToInt(Math.Floor(SurvivalTime * survivalPointsPerSecond));
-        ManualClearScore = ClampToInt((long)ManualClearedBullets * manualClearPoints);
-        BossStageReward = CalculateBossStageReward(CompletedBossRounds);
+        TimeScore = SafeInt(Math.Floor(RunTime * timePoints));
+        ClearScore = SafeInt((long)ClearCount * clearPoints);
+        BossScore = BossScoreFor(BossRounds);
 
-        long rawScore = (long)SurvivalScore + ManualClearScore + BossStageReward;
-        FinalScore = ClampToInt(Math.Round(rawScore * DifficultyCoefficient, MidpointRounding.AwayFromZero));
+        long raw = (long)TimeScore + ClearScore + BossScore;
+        TotalScore = SafeInt(Math.Round(raw * ScoreRate, MidpointRounding.AwayFromZero));
 
-        if (FinalScore != previousScore)
+        if (TotalScore != oldScore)
         {
-            ScoreChanged?.Invoke(FinalScore);
+            ScoreUpdated?.Invoke(TotalScore);
         }
     }
 
-    public void FinalizeScore()
+    public void FinishScore()
     {
-        if (IsFinalized)
+        if (Finished)
             return;
 
-        RecalculateScore();
-        IsFinalized = true;
+        UpdateScore();
+        Finished = true;
     }
 
-    public float GetDifficultyCoefficient(int difficultyId)
+    public float RateFor(int difficultyId)
     {
         switch (difficultyId)
         {
             case 1:
-                return easyDifficultyCoefficient;
+                return easyRate;
             case 3:
-                return hardDifficultyCoefficient;
+                return hardRate;
             case 2:
             default:
-                return normalDifficultyCoefficient;
+                return normalRate;
         }
     }
 
-    public int CalculateBossStageReward(int completedRounds)
+    public int BossScoreFor(int completedRounds)
     {
         long rounds = Mathf.Max(0, completedRounds);
-        long reward = (long)bossRoundBaseReward * rounds * (rounds + 1L) / 2L;
-        return ClampToInt(reward);
+        long reward = (long)bossPoints * rounds * (rounds + 1L) / 2L;
+        return SafeInt(reward);
     }
 
-    private void BindDependencies()
+    private void Bind()
     {
         GameFlowManager nextFlow = GetComponent<GameFlowManager>();
         if (nextFlow == null)
@@ -172,78 +179,78 @@ public class ScoreManager : MonoBehaviour
             nextFlow = GameFlowManager.Instance;
         }
 
-        if (flowManager != nextFlow)
+        if (flow != nextFlow)
         {
-            if (flowManager != null)
+            if (flow != null)
             {
-                flowManager.StateChanged -= HandleFlowStateChanged;
+                flow.StateUpdated -= OnFlowState;
             }
 
-            flowManager = nextFlow;
-            if (flowManager != null)
+            flow = nextFlow;
+            if (flow != null)
             {
-                flowManager.StateChanged += HandleFlowStateChanged;
+                flow.StateUpdated += OnFlowState;
             }
         }
 
-        difficultyDirector = GetComponent<DifficultyDirector>();
-        if (difficultyDirector == null)
+        director = GetComponent<DifficultyDirector>();
+        if (director == null)
         {
-            difficultyDirector = DifficultyDirector.Instance;
+            director = DifficultyDirector.Instance;
         }
     }
 
-    private void HandleFlowStateChanged(GameFlowState state)
+    private void OnFlowState(GameFlowState state)
     {
         if (state == GameFlowState.GameOver)
         {
-            FinalizeScore();
+            FinishScore();
             return;
         }
 
-        if (state == GameFlowState.Normal && flowManager != null && flowManager.SurvivalTime <= 0.0001f)
+        if (state == GameFlowState.Normal && flow != null && flow.RunTime <= 0.0001f)
         {
-            ResetScore();
+            Reset();
         }
     }
 
-    private GameFlowManager GetFlowManager()
+    private GameFlowManager GetFlow()
     {
-        if (flowManager == null)
+        if (flow == null)
         {
-            BindDependencies();
+            Bind();
         }
 
-        return flowManager;
+        return flow;
     }
 
-    private DifficultyDirector GetDifficultyDirector()
+    private DifficultyDirector Director()
     {
-        if (difficultyDirector == null)
+        if (director == null)
         {
-            BindDependencies();
+            Bind();
         }
 
-        return difficultyDirector;
+        return director;
     }
 
-    private int GetCurrentDifficultyId()
+    private int DifficultyId()
     {
-        DifficultyInfo difficulty = GameDataMgr.Instance.GetNowDifficultyInfo();
+        DifficultyInfo difficulty = GameDataMgr.Instance.GetDifficulty();
         return difficulty != null ? difficulty.id : 2;
     }
 
-    private void ClampSettings()
+    private void ClampValues()
     {
-        survivalPointsPerSecond = Mathf.Max(0, survivalPointsPerSecond);
-        manualClearPoints = Mathf.Max(0, manualClearPoints);
-        bossRoundBaseReward = Mathf.Max(0, bossRoundBaseReward);
-        easyDifficultyCoefficient = Mathf.Max(0.01f, easyDifficultyCoefficient);
-        normalDifficultyCoefficient = Mathf.Max(0.01f, normalDifficultyCoefficient);
-        hardDifficultyCoefficient = Mathf.Max(0.01f, hardDifficultyCoefficient);
+        timePoints = Mathf.Max(0, timePoints);
+        clearPoints = Mathf.Max(0, clearPoints);
+        bossPoints = Mathf.Max(0, bossPoints);
+        easyRate = Mathf.Max(0.01f, easyRate);
+        normalRate = Mathf.Max(0.01f, normalRate);
+        hardRate = Mathf.Max(0.01f, hardRate);
     }
 
-    private static int ClampToInt(double value)
+    private static int SafeInt(double value)
     {
         if (value >= int.MaxValue)
             return int.MaxValue;
@@ -252,7 +259,7 @@ public class ScoreManager : MonoBehaviour
         return (int)value;
     }
 
-    private static void DestroyComponent(Component target)
+    private static void DestroyNow(Component target)
     {
         if (target == null)
             return;

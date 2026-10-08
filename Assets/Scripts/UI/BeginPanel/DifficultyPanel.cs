@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -15,22 +17,22 @@ public class DifficultyPanel : BasePanel<DifficultyPanel>
 
     private static readonly Color SelectedTint = new Color(0.55f, 0.95f, 1f, 1f);
 
-    private Color easyDefaultColor;
-    private Color normalDefaultColor;
-    private Color hardDefaultColor;
-    private bool buttonColorsCached;
+    private Color easyColor;
+    private Color normalColor;
+    private Color hardColor;
+    private bool hasColors;
 
-    public int SelectedDifficultyId { get; private set; }
+    public int DifficultyId { get; private set; }
 
     public override void Init()
     {
-        CacheButtonColors();
+        CacheColors();
 
         if (btnEasy != null)
         {
             btnEasy.onClick.Add(new EventDelegate(() =>
             {
-                SelectDifficulty(1);
+                Select(1);
             }));
         }
 
@@ -38,7 +40,7 @@ public class DifficultyPanel : BasePanel<DifficultyPanel>
         {
             btnNormal.onClick.Add(new EventDelegate(() =>
             {
-                SelectDifficulty(2);
+                Select(2);
             }));
         }
 
@@ -46,7 +48,7 @@ public class DifficultyPanel : BasePanel<DifficultyPanel>
         {
             btnHard.onClick.Add(new EventDelegate(() =>
             {
-                SelectDifficulty(3);
+                Select(3);
             }));
         }
 
@@ -62,7 +64,7 @@ public class DifficultyPanel : BasePanel<DifficultyPanel>
                 Hideme();
                 if (ChoosePanel.Instance != null)
                 {
-                    ChoosePanel.Instance.ShowmeKeepingSelection();
+                    ChoosePanel.Instance.ShowCurrent();
                 }
             }));
         }
@@ -70,22 +72,22 @@ public class DifficultyPanel : BasePanel<DifficultyPanel>
         Hideme();
     }
 
-    public void SelectDifficulty(int difficultyId)
+    public void Select(int difficultyId)
     {
         GameDataMgr.Instance.SetDifficulty(difficultyId);
-        DifficultyInfo selected = GameDataMgr.Instance.GetNowDifficultyInfo();
-        SelectedDifficultyId = selected != null ? selected.id : difficultyId;
-        RefreshSelection();
+        DifficultyInfo selected = GameDataMgr.Instance.GetDifficulty();
+        DifficultyId = selected != null ? selected.id : difficultyId;
+        Refresh();
     }
 
     private void StartGame()
     {
-        if (SelectedDifficultyId <= 0)
+        if (DifficultyId <= 0)
         {
-            SelectDifficulty(GameDataMgr.Instance.nowDifficultyIndex);
+            Select(GameDataMgr.Instance.difficultyIndex);
         }
 
-        GameDataMgr.Instance.SetDifficulty(SelectedDifficultyId);
+        GameDataMgr.Instance.SetDifficulty(DifficultyId);
         Time.timeScale = 1;
         SceneManager.LoadScene("GameScene");
     }
@@ -98,13 +100,13 @@ public class DifficultyPanel : BasePanel<DifficultyPanel>
             labTitle.text = "选择难度";
         }
 
-        CacheButtonColors();
-        SelectDifficulty(GameDataMgr.Instance.nowDifficultyIndex);
+        CacheColors();
+        Select(GameDataMgr.Instance.difficultyIndex);
     }
 
-    private void RefreshSelection()
+    private void Refresh()
     {
-        DifficultyInfo selected = GameDataMgr.Instance.GetNowDifficultyInfo();
+        DifficultyInfo selected = GameDataMgr.Instance.GetDifficulty();
         if (selected == null)
         {
             return;
@@ -117,25 +119,25 @@ public class DifficultyPanel : BasePanel<DifficultyPanel>
 
         if (labDetail != null)
         {
-            labDetail.text = BuildDetailText(selected);
+            labDetail.text = DetailText(selected);
         }
 
-        ApplyButtonState(btnEasy, easyDefaultColor, selected.id == 1);
-        ApplyButtonState(btnNormal, normalDefaultColor, selected.id == 2);
-        ApplyButtonState(btnHard, hardDefaultColor, selected.id == 3);
+        SetButton(btnEasy, easyColor, selected.id == 1);
+        SetButton(btnNormal, normalColor, selected.id == 2);
+        SetButton(btnHard, hardColor, selected.id == 3);
     }
 
-    private void CacheButtonColors()
+    private void CacheColors()
     {
-        if (buttonColorsCached)
+        if (hasColors)
         {
             return;
         }
 
-        easyDefaultColor = GetButtonColor(btnEasy);
-        normalDefaultColor = GetButtonColor(btnNormal);
-        hardDefaultColor = GetButtonColor(btnHard);
-        buttonColorsCached = true;
+        easyColor = GetButtonColor(btnEasy);
+        normalColor = GetButtonColor(btnNormal);
+        hardColor = GetButtonColor(btnHard);
+        hasColors = true;
     }
 
     private static Color GetButtonColor(UIButton button)
@@ -144,7 +146,7 @@ public class DifficultyPanel : BasePanel<DifficultyPanel>
         return widget != null ? widget.color : Color.white;
     }
 
-    private static void ApplyButtonState(UIButton button, Color defaultColor, bool selected)
+    private static void SetButton(UIButton button, Color defaultColor, bool selected)
     {
         if (button == null)
         {
@@ -174,18 +176,18 @@ public class DifficultyPanel : BasePanel<DifficultyPanel>
         return target.GetComponent<UIWidget>();
     }
 
-    private static string BuildDetailText(DifficultyInfo info)
+    private static string DetailText(DifficultyInfo info)
     {
-        string hpText = info.hpAdd > 0
-            ? "+" + info.hpAdd.ToString(CultureInfo.InvariantCulture)
-            : info.hpAdd.ToString(CultureInfo.InvariantCulture);
-        string bulletSpeed = Mathf.RoundToInt(info.bulletSpeedMul * 100f).ToString(CultureInfo.InvariantCulture);
+        string hpText = info.hpBonus > 0
+            ? "+" + info.hpBonus.ToString(CultureInfo.InvariantCulture)
+            : info.hpBonus.ToString(CultureInfo.InvariantCulture);
+        string bulletSpeed = Mathf.RoundToInt(info.bulletRate * 100f).ToString(CultureInfo.InvariantCulture);
         string shieldTime = info.shieldTime.ToString("0.#", CultureInfo.InvariantCulture);
-        string skillCooldown = info.skillCD.ToString("0.#", CultureInfo.InvariantCulture);
+        string skillCd = info.skillCd.ToString("0.#", CultureInfo.InvariantCulture);
 
         return "生命修正 " + hpText +
             "  |  敌弹速度 " + bulletSpeed + "%" +
             "  |  护盾 " + shieldTime + " 秒" +
-            "  |  技能冷却 " + skillCooldown + " 秒";
+            "  |  技能冷却 " + skillCd + " 秒";
     }
 }

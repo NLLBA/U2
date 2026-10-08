@@ -1,5 +1,8 @@
-using System;
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
+using System;
 
 public enum GameFlowState
 {
@@ -16,24 +19,28 @@ public class GameFlowManager : MonoBehaviour
 
     public static GameFlowManager Instance => instance;
 
-    [Min(1f)] public float firstBossTime = 120f;
-    [Min(0f)] public float bossWarningTime = 3f;
-    [Min(1f)] public float bossDuration = 30f;
-    [Min(1f)] public float normalInterval = 90f;
+    [FormerlySerializedAs("firstBossTime")]
+    [Min(1f)] public float bossStart = 120f;
+    [FormerlySerializedAs("bossWarningTime")]
+    [Min(0f)] public float warnTime = 3f;
+    [FormerlySerializedAs("bossDuration")]
+    [Min(1f)] public float bossTime = 30f;
+    [FormerlySerializedAs("normalInterval")]
+    [Min(1f)] public float bossGap = 90f;
 
     public GameFlowState State { get; private set; }
-    public float SurvivalTime { get; private set; }
-    public float StateElapsedTime { get; private set; }
-    public float NextBossTime { get; private set; }
-    public int CurrentBossRound { get; private set; }
-    public int CompletedBossRounds { get; private set; }
+    public float RunTime { get; private set; }
+    public float StateTime { get; private set; }
+    public float NextBoss { get; private set; }
+    public int BossRound { get; private set; }
+    public int BossRounds { get; private set; }
 
-    public event Action<GameFlowState> StateChanged;
+    public event Action<GameFlowState> StateUpdated;
 
-    private GameFlowState stateBeforePause;
-    private float stateElapsedBeforePause;
+    private GameFlowState pausedState;
+    private float pausedTime;
 
-    public static GameFlowManager EnsureInstance(GameObject host = null)
+    public static GameFlowManager Ensure(GameObject host = null)
     {
         if (instance != null)
             return instance;
@@ -52,7 +59,7 @@ public class GameFlowManager : MonoBehaviour
         }
 
         instance = this;
-        ResetFlow();
+        Reset();
     }
 
     private void OnDestroy()
@@ -65,72 +72,72 @@ public class GameFlowManager : MonoBehaviour
 
     private void Update()
     {
-        AdvanceFlow(Time.deltaTime);
+        Advance(Time.deltaTime);
     }
 
-    public void ResetFlow()
+    public void Reset()
     {
-        firstBossTime = Mathf.Max(1f, firstBossTime);
-        bossWarningTime = Mathf.Clamp(bossWarningTime, 0f, firstBossTime);
-        bossDuration = Mathf.Max(1f, bossDuration);
-        normalInterval = Mathf.Max(bossWarningTime + 1f, normalInterval);
+        bossStart = Mathf.Max(1f, bossStart);
+        warnTime = Mathf.Clamp(warnTime, 0f, bossStart);
+        bossTime = Mathf.Max(1f, bossTime);
+        bossGap = Mathf.Max(warnTime + 1f, bossGap);
 
-        SurvivalTime = 0f;
-        StateElapsedTime = 0f;
-        NextBossTime = firstBossTime;
-        CurrentBossRound = 0;
-        CompletedBossRounds = 0;
-        stateBeforePause = GameFlowState.Normal;
-        stateElapsedBeforePause = 0f;
+        RunTime = 0f;
+        StateTime = 0f;
+        NextBoss = bossStart;
+        BossRound = 0;
+        BossRounds = 0;
+        pausedState = GameFlowState.Normal;
+        pausedTime = 0f;
         SetState(GameFlowState.Normal);
     }
 
-    public void AdvanceFlow(float deltaTime)
+    public void Advance(float deltaTime)
     {
         if (State == GameFlowState.Paused || State == GameFlowState.GameOver)
             return;
 
-        float remainingTime = Mathf.Max(0f, deltaTime);
-        int transitionGuard = 0;
+        float remaining = Mathf.Max(0f, deltaTime);
+        int guard = 0;
 
-        while (remainingTime > 0f && transitionGuard++ < 8)
+        while (remaining > 0f && guard++ < 8)
         {
-            float timeToTransition = GetTimeToTransition();
-            float step = Mathf.Min(remainingTime, timeToTransition);
+            float timeLeft = TimeLeft();
+            float step = Mathf.Min(remaining, timeLeft);
 
-            SurvivalTime += step;
-            StateElapsedTime += step;
-            remainingTime -= step;
+            RunTime += step;
+            StateTime += step;
+            remaining -= step;
 
-            if (timeToTransition - step > 0.0001f)
+            if (timeLeft - step > 0.0001f)
                 break;
 
-            MoveToNextState();
+            NextState();
         }
     }
 
-    public void PauseGame()
+    public void Pause()
     {
         if (State == GameFlowState.Paused || State == GameFlowState.GameOver)
             return;
 
-        stateBeforePause = State;
-        stateElapsedBeforePause = StateElapsedTime;
+        pausedState = State;
+        pausedTime = StateTime;
         Time.timeScale = 0f;
         SetState(GameFlowState.Paused);
     }
 
-    public void ResumeGame()
+    public void Resume()
     {
         if (State != GameFlowState.Paused)
             return;
 
         Time.timeScale = 1f;
-        SetState(stateBeforePause);
-        StateElapsedTime = stateElapsedBeforePause;
+        SetState(pausedState);
+        StateTime = pausedTime;
     }
 
-    public void EnterGameOver()
+    public void GameOver()
     {
         if (State == GameFlowState.GameOver)
             return;
@@ -139,31 +146,31 @@ public class GameFlowManager : MonoBehaviour
         SetState(GameFlowState.GameOver);
     }
 
-    public float GetCurrentCountdown()
+    public float Countdown()
     {
         switch (State)
         {
             case GameFlowState.Normal:
             case GameFlowState.BossWarning:
-                return Mathf.Max(0f, NextBossTime - SurvivalTime);
+                return Mathf.Max(0f, NextBoss - RunTime);
             case GameFlowState.BossSurvival:
-                return Mathf.Max(0f, bossDuration - StateElapsedTime);
+                return Mathf.Max(0f, bossTime - StateTime);
             default:
                 return 0f;
         }
     }
 
-    public string GetStatusText()
+    public string StatusText()
     {
-        int seconds = Mathf.CeilToInt(GetCurrentCountdown());
+        int seconds = Mathf.CeilToInt(Countdown());
         switch (State)
         {
             case GameFlowState.Normal:
-                return "距离第" + (CompletedBossRounds + 1) + "轮BOSS：" + seconds + "秒";
+                return "距离第" + (BossRounds + 1) + "轮BOSS：" + seconds + "秒";
             case GameFlowState.BossWarning:
-                return "BOSS预警：第" + (CompletedBossRounds + 1) + "轮 " + seconds + "秒";
+                return "BOSS预警：第" + (BossRounds + 1) + "轮 " + seconds + "秒";
             case GameFlowState.BossSurvival:
-                return "第" + CurrentBossRound + "轮BOSS：" + seconds + "秒";
+                return "第" + BossRound + "轮BOSS：" + seconds + "秒";
             case GameFlowState.Paused:
                 return "游戏已暂停";
             case GameFlowState.GameOver:
@@ -173,22 +180,22 @@ public class GameFlowManager : MonoBehaviour
         }
     }
 
-    private float GetTimeToTransition()
+    private float TimeLeft()
     {
         switch (State)
         {
             case GameFlowState.Normal:
-                return Mathf.Max(0f, NextBossTime - bossWarningTime - SurvivalTime);
+                return Mathf.Max(0f, NextBoss - warnTime - RunTime);
             case GameFlowState.BossWarning:
-                return Mathf.Max(0f, NextBossTime - SurvivalTime);
+                return Mathf.Max(0f, NextBoss - RunTime);
             case GameFlowState.BossSurvival:
-                return Mathf.Max(0f, bossDuration - StateElapsedTime);
+                return Mathf.Max(0f, bossTime - StateTime);
             default:
                 return float.PositiveInfinity;
         }
     }
 
-    private void MoveToNextState()
+    private void NextState()
     {
         switch (State)
         {
@@ -196,12 +203,12 @@ public class GameFlowManager : MonoBehaviour
                 SetState(GameFlowState.BossWarning);
                 break;
             case GameFlowState.BossWarning:
-                CurrentBossRound = CompletedBossRounds + 1;
+                BossRound = BossRounds + 1;
                 SetState(GameFlowState.BossSurvival);
                 break;
             case GameFlowState.BossSurvival:
-                CompletedBossRounds = CurrentBossRound;
-                NextBossTime = SurvivalTime + normalInterval;
+                BossRounds = BossRound;
+                NextBoss = RunTime + bossGap;
                 SetState(GameFlowState.Normal);
                 break;
         }
@@ -209,10 +216,10 @@ public class GameFlowManager : MonoBehaviour
 
     private void SetState(GameFlowState newState)
     {
-        GameFlowState previousState = State;
+        GameFlowState oldState = State;
         State = newState;
-        StateElapsedTime = 0f;
-        StateChanged?.Invoke(State);
+        StateTime = 0f;
+        StateUpdated?.Invoke(State);
 
         if (!Application.isPlaying)
             return;
@@ -226,7 +233,7 @@ public class GameFlowManager : MonoBehaviour
                 SoundManager.Play(SoundCue.BossAppear);
                 break;
             case GameFlowState.Normal:
-                if (previousState == GameFlowState.BossSurvival)
+                if (oldState == GameFlowState.BossSurvival)
                 {
                     SoundManager.Play(SoundCue.BossCleared);
                 }

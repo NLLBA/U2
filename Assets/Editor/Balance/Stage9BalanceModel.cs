@@ -8,10 +8,10 @@ public sealed class Stage9PressureSnapshot
     public int DifficultyId;
     public string DifficultyName;
     public string Label;
-    public float SurvivalTime;
+    public float RunTime;
     public GameFlowState State;
     public int BossRound;
-    public int CompletedBossRounds;
+    public int BossRounds;
     public int ThreatLevel;
     public string LevelName;
     public float NormalBulletsPerSecond;
@@ -72,7 +72,7 @@ public static class Stage9BalanceModel
     {
         public GameFlowState State;
         public int BossRound;
-        public int CompletedBossRounds;
+        public int BossRounds;
     }
 
     public static Stage9BalanceReport BuildReport(
@@ -86,9 +86,9 @@ public static class Stage9BalanceModel
         float[] snapshotTimes = { 60f, 120f, 144f, 264f };
         string[] snapshotLabels = { "60s", "120s / Boss 1 start", "Boss 1 peak", "Boss 2 peak" };
 
-        for (int difficultyIndex = 0; difficultyIndex < data.difficultyData.difficultyInfos.Count; difficultyIndex++)
+        for (int difficultyIndex = 0; difficultyIndex < data.difficultyData.difficulties.Count; difficultyIndex++)
         {
-            DifficultyInfo difficulty = data.difficultyData.difficultyInfos[difficultyIndex];
+            DifficultyInfo difficulty = data.difficultyData.difficulties[difficultyIndex];
             for (int snapshotIndex = 0; snapshotIndex < snapshotTimes.Length; snapshotIndex++)
             {
                 report.PressureSnapshots.Add(CalculateSnapshot(
@@ -100,13 +100,13 @@ public static class Stage9BalanceModel
                     snapshotLabels[snapshotIndex]));
             }
 
-            for (int heroIndex = 0; heroIndex < data.roleData.roleDatas.Count; heroIndex++)
+            for (int heroIndex = 0; heroIndex < data.roleData.roles.Count; heroIndex++)
             {
                 report.SimulationResults.Add(SimulateCombination(
                     data,
                     director,
                     boss,
-                    data.roleData.roleDatas[heroIndex],
+                    data.roleData.roles[heroIndex],
                     heroIndex,
                     difficulty,
                     trialCount,
@@ -122,28 +122,28 @@ public static class Stage9BalanceModel
         DifficultyDirector director,
         BossController boss,
         DifficultyInfo difficulty,
-        float survivalTime,
+        float runTime,
         string label)
     {
-        FlowPoint flow = GetFlowPoint(survivalTime);
-        LevelInfo level = GetLevelAtTime(data, survivalTime);
+        FlowPoint flow = GetFlowPoint(runTime);
+        LevelInfo level = GetLevelAtTime(data, runTime);
         int growthSteps = Mathf.Max(0,
-            Mathf.FloorToInt(survivalTime / director.threatStepSeconds) +
-            flow.CompletedBossRounds * director.bossThreatLevelBonus);
+            Mathf.FloorToInt(runTime / director.threatStep) +
+            flow.BossRounds * director.bossThreat);
 
         float dynamicSpeed = Mathf.Min(
-            1f + growthSteps * director.bulletSpeedGrowthPerLevel,
-            director.maxBulletSpeedMultiplier);
+            1f + growthSteps * director.bulletGrowth,
+            director.maxBulletSpeed);
         float normalSpeed = Mathf.Min(
-            difficulty.bulletSpeedMul * level.bulletSpeedMul * dynamicSpeed,
-            director.maxBulletSpeedMultiplier);
+            difficulty.bulletRate * level.bulletRate * dynamicSpeed,
+            director.maxBulletSpeed);
 
         float dynamicInterval = Mathf.Max(
-            1f - growthSteps * director.fireIntervalReductionPerLevel,
-            director.minFireIntervalMultiplier);
+            1f - growthSteps * director.fireDrop,
+            director.minFireRate);
         float normalIntensity = flow.State == GameFlowState.BossWarning ||
             flow.State == GameFlowState.BossSurvival
-            ? boss.normalFireIntensityDuringBoss
+            ? boss.bossFireScale
             : 1f;
         float normalRate = CalculateNormalBulletRate(
             data,
@@ -157,20 +157,20 @@ public static class Stage9BalanceModel
         if (flow.State == GameFlowState.BossSurvival)
         {
             int round = Mathf.Max(1, flow.BossRound);
-            float roundSpeed = Mathf.Min(
-                1f + (round - 1) * director.bossBulletSpeedGrowthPerRound,
-                director.maxBossBulletSpeedMultiplier);
+            float turnSpeed = Mathf.Min(
+                1f + (round - 1) * director.bossGrowth,
+                director.maxBossSpeed);
             bossSpeed = Mathf.Min(
-                difficulty.bulletSpeedMul * roundSpeed,
-                director.maxBossBulletSpeedMultiplier);
+                difficulty.bulletRate * turnSpeed,
+                director.maxBossSpeed);
 
             float roundInterval = Mathf.Max(
-                1f - (round - 1) * director.bossFireIntervalReductionPerRound,
-                director.minBossFireIntervalMultiplier);
+                1f - (round - 1) * director.bossFireDrop,
+                director.minBossRate);
             float intervalMultiplier = Mathf.Max(
-                difficulty.fireCdMul * roundInterval,
-                director.minBossFireIntervalMultiplier);
-            float attackInterval = Mathf.Max(0.16f, boss.baseAttackInterval * intervalMultiplier);
+                difficulty.fireRate * roundInterval,
+                director.minBossRate);
+            float attackInterval = Mathf.Max(0.16f, boss.fireGap * intervalMultiplier);
 
             float totalVolleyCount = 0f;
             float peakVolleyCount = 0f;
@@ -184,7 +184,7 @@ public static class Stage9BalanceModel
 
             for (int i = 0; i < patterns.Length; i++)
             {
-                float volleyCount = boss.GetPrimaryVolleyBulletCount(patterns[i], round);
+                float volleyCount = boss.VolleySize(patterns[i], round);
                 if (round >= 2 && patterns[i] != BossAttackPattern.Cross)
                 {
                     volleyCount += 2f;
@@ -207,10 +207,10 @@ public static class Stage9BalanceModel
             DifficultyId = difficulty.id,
             DifficultyName = difficulty.name,
             Label = label,
-            SurvivalTime = survivalTime,
+            RunTime = runTime,
             State = flow.State,
             BossRound = flow.BossRound,
-            CompletedBossRounds = flow.CompletedBossRounds,
+            BossRounds = flow.BossRounds,
             ThreatLevel = growthSteps + 1,
             LevelName = level.name,
             NormalBulletsPerSecond = normalRate,
@@ -254,9 +254,9 @@ public static class Stage9BalanceModel
         {
             int seed = 7919 + heroIndex * 100003 + difficulty.id * 1009 + trial * 37;
             System.Random random = new System.Random(seed);
-            int maximumHp = Mathf.Max(1, role.hp + difficulty.hpAdd);
+            int maximumHp = Mathf.Max(1, role.hp + difficulty.hpBonus);
             int hp = maximumHp;
-            float survivalTime = safeMaximumSeconds;
+            float runTime = safeMaximumSeconds;
             float pressureSum = 0f;
 
             for (int second = 0; second < safeMaximumSeconds; second++)
@@ -275,36 +275,36 @@ public static class Stage9BalanceModel
                     hp--;
                     if (hp <= 0)
                     {
-                        survivalTime = second + 1f;
+                        runTime = second + 1f;
                         break;
                     }
                 }
             }
 
-            FlowPoint deathFlow = GetFlowPoint(survivalTime);
-            int completedRounds = deathFlow.CompletedBossRounds;
-            float averagePressure = pressureSum / Mathf.Max(1f, survivalTime);
+            FlowPoint deathFlow = GetFlowPoint(runTime);
+            int completedRounds = deathFlow.BossRounds;
+            float averagePressure = pressureSum / Mathf.Max(1f, runTime);
             int manualClears = Mathf.FloorToInt(
-                survivalTime * Mathf.Clamp(0.13f + averagePressure * 0.006f, 0.13f, 0.32f));
-            int rawScore = Mathf.FloorToInt(survivalTime) * 10 + manualClears * 25 +
+                runTime * Mathf.Clamp(0.13f + averagePressure * 0.006f, 0.13f, 0.32f));
+            int raw = Mathf.FloorToInt(runTime) * 10 + manualClears * 25 +
                 1000 * completedRounds * (completedRounds + 1) / 2;
-            totalScore += Mathf.Round(rawScore * GetScoreCoefficient(difficulty.id));
+            totalScore += Mathf.Round(raw * GetScoreCoefficient(difficulty.id));
 
-            survivalTimes.Add(survivalTime);
-            if (survivalTime >= FirstBossTime)
+            survivalTimes.Add(runTime);
+            if (runTime >= FirstBossTime)
             {
                 firstBossReached++;
             }
-            if (survivalTime >= FirstBossTime && survivalTime < FirstBossTime + BossDuration)
+            if (runTime >= FirstBossTime && runTime < FirstBossTime + BossDuration)
             {
                 firstBossDeaths++;
             }
-            if (survivalTime >= FirstBossTime + BossDuration + NormalInterval)
+            if (runTime >= FirstBossTime + BossDuration + NormalInterval)
             {
                 secondBossReached++;
             }
-            if (survivalTime >= FirstBossTime + BossDuration + NormalInterval &&
-                survivalTime < FirstBossTime + BossDuration + NormalInterval + BossDuration)
+            if (runTime >= FirstBossTime + BossDuration + NormalInterval &&
+                runTime < FirstBossTime + BossDuration + NormalInterval + BossDuration)
             {
                 secondBossDeaths++;
             }
@@ -314,10 +314,10 @@ public static class Stage9BalanceModel
         return new Stage9SimulationResult
         {
             HeroIndex = heroIndex + 1,
-            HeroResource = role.resName,
+            HeroResource = role.asset,
             DifficultyId = difficulty.id,
             DifficultyName = difficulty.name,
-            StartingHp = Mathf.Max(1, role.hp + difficulty.hpAdd),
+            StartingHp = Mathf.Max(1, role.hp + difficulty.hpBonus),
             Speed = role.speed,
             Volume = role.volume,
             SkillName = GetSkillName(heroIndex),
@@ -340,12 +340,12 @@ public static class Stage9BalanceModel
         float dynamicInterval)
     {
         HashSet<int> unlockedFireIds = ParseIds(level.fireIds);
-        List<FireInfo> candidates = data.fireData.fireInfoList
+        List<FireInfo> candidates = data.fireData.fires
             .Where(info => unlockedFireIds.Count == 0 || unlockedFireIds.Contains(info.id))
             .ToList();
         if (candidates.Count == 0)
         {
-            candidates.AddRange(data.fireData.fireInfoList);
+            candidates.AddRange(data.fireData.fires);
         }
         if (candidates.Count == 0)
             return 0f;
@@ -356,10 +356,10 @@ public static class Stage9BalanceModel
             FireInfo fire = candidates[i];
             float cd = fire.cd <= 0f
                 ? 0f
-                : Mathf.Max(0.08f, fire.cd * difficulty.fireCdMul * level.fireCdMul * dynamicInterval);
+                : Mathf.Max(0.08f, fire.cd * difficulty.fireRate * level.fireRate * dynamicInterval);
             float delay = fire.delay <= 0f
                 ? 0f
-                : Mathf.Max(0.5f, fire.delay * difficulty.fireDelayMul * level.fireDelayMul * dynamicInterval);
+                : Mathf.Max(0.5f, fire.delay * difficulty.delayRate * level.delayRate * dynamicInterval);
             float cycleDuration = Mathf.Max(0.08f, delay + fire.num * cd);
             totalRate += Mathf.Max(0, fire.num) / cycleDuration;
         }
@@ -367,9 +367,9 @@ public static class Stage9BalanceModel
         return totalRate / candidates.Count * EmitterCount;
     }
 
-    private static FlowPoint GetFlowPoint(float survivalTime)
+    private static FlowPoint GetFlowPoint(float runTime)
     {
-        float safeTime = Mathf.Max(0f, survivalTime);
+        float safeTime = Mathf.Max(0f, runTime);
         if (safeTime < FirstBossTime - BossWarningTime)
         {
             return new FlowPoint { State = GameFlowState.Normal };
@@ -388,7 +388,7 @@ public static class Stage9BalanceModel
             {
                 State = GameFlowState.BossSurvival,
                 BossRound = cycle + 1,
-                CompletedBossRounds = cycle,
+                BossRounds = cycle,
             };
         }
 
@@ -399,25 +399,25 @@ public static class Stage9BalanceModel
             {
                 State = GameFlowState.BossWarning,
                 BossRound = completed + 1,
-                CompletedBossRounds = completed,
+                BossRounds = completed,
             };
         }
 
         return new FlowPoint
         {
             State = GameFlowState.Normal,
-            CompletedBossRounds = completed,
+            BossRounds = completed,
         };
     }
 
-    private static LevelInfo GetLevelAtTime(GameDataMgr data, float survivalTime)
+    private static LevelInfo GetLevelAtTime(GameDataMgr data, float runTime)
     {
-        LevelInfo result = data.levelData.levelInfos[0];
-        for (int i = 0; i < data.levelData.levelInfos.Count; i++)
+        LevelInfo result = data.levelData.levels[0];
+        for (int i = 0; i < data.levelData.levels.Count; i++)
         {
-            if (survivalTime >= data.levelData.levelInfos[i].beginTime)
+            if (runTime >= data.levelData.levels[i].beginTime)
             {
-                result = data.levelData.levelInfos[i];
+                result = data.levelData.levels[i];
             }
         }
 
@@ -449,7 +449,7 @@ public static class Stage9BalanceModel
         DifficultyInfo difficulty,
         int second)
     {
-        float shieldUptime = Mathf.Clamp01(difficulty.shieldTime / Mathf.Max(1f, difficulty.skillCD));
+        float shieldUptime = Mathf.Clamp01(difficulty.shieldTime / Mathf.Max(1f, difficulty.skillCd));
         float mitigation = 1f - shieldUptime * 0.68f;
 
         switch (heroIndex)
@@ -458,13 +458,13 @@ public static class Stage9BalanceModel
                 mitigation *= 0.86f;
                 break;
             case 2:
-                mitigation *= 1f - Mathf.Clamp01(5f / (difficulty.skillCD + 1f)) * 0.36f;
+                mitigation *= 1f - Mathf.Clamp01(5f / (difficulty.skillCd + 1f)) * 0.36f;
                 break;
             case 3:
-                mitigation *= 1f - Mathf.Clamp01(4f / (difficulty.skillCD + 4f)) * 0.48f;
+                mitigation *= 1f - Mathf.Clamp01(4f / (difficulty.skillCd + 4f)) * 0.48f;
                 break;
             case 4:
-                float boostUptime = Mathf.Clamp01(5f / Mathf.Max(1f, difficulty.skillCD));
+                float boostUptime = Mathf.Clamp01(5f / Mathf.Max(1f, difficulty.skillCd));
                 mitigation *= 1f - boostUptime * 0.24f;
                 break;
         }
@@ -482,7 +482,7 @@ public static class Stage9BalanceModel
         if (heroIndex != 1 || second <= 0)
             return;
 
-        int interval = Mathf.Max(1, Mathf.RoundToInt(difficulty.skillCD + 3f));
+        int interval = Mathf.Max(1, Mathf.RoundToInt(difficulty.skillCd + 3f));
         if (second % interval == 0)
         {
             hp = Mathf.Min(maximumHp, hp + 2);

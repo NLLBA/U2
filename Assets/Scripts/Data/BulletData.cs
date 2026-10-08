@@ -1,37 +1,37 @@
-using System.Collections;
 using System.Collections.Generic;
 using System.Xml.Serialization;
-using UnityEngine;
 
-public class BulletData 
+public class BulletData
 {
-    public List<BulletInfo> bulletInfoList = new List<BulletInfo>();
+    [XmlArray("bulletInfoList")]
+    public List<BulletInfo> bullets = new List<BulletInfo>();
 }
 
 public class BulletInfo
 {
-    //×Óµ¯Êı¾İµÄID
+    // å­å¼¹æ•°æ® IDã€‚
     [XmlAttribute]
     public int id;
-    //×Óµ¯µÄÒÆ¶¯¹æÔò
+
+    // å­å¼¹ç§»åŠ¨è§„åˆ™ã€‚
     [XmlAttribute]
     public int type;
-    //Õı³¯Ïò ÒÆ¶¯ËÙ¶È
-    [XmlAttribute]
-    public float forwardSpeed;
-    //ºáÏòÒÆ¶¯ËÙ¶È
-    [XmlAttribute]
-    public float rightSpeed;
-    //Ğı×ªËÙ¶È
-    [XmlAttribute]
-    public float roundSpeed;
-    //×Óµ¯ÌØĞ§×ÊÔ´Â·¾¶
-    [XmlAttribute]
-    public string resName;
-    //×Óµ¯Ïú»ÙÊ± ´´½¨µÄËÀÍöÌØĞ§
-    [XmlAttribute]
-    public string deadEffRes;
-    //×Óµ¯³öÉúµ½Ïú»ÙµÄÉúÃüÖÜÆÚÊ±¼ä
-    [XmlAttribute]
-    public float lifeTime;
+
+    [XmlAttribute("forwardSpeed")]
+    public float moveRate;
+
+    [XmlAttribute("rightSpeed")]
+    public float sideSpeed;
+
+    [XmlAttribute("roundSpeed")]
+    public float turnSpeed;
+
+    [XmlAttribute("resName")]
+    public string asset;
+
+    [XmlAttribute("deadEffRes")]
+    public string deathFx;
+
+    [XmlAttribute("lifeTime")]
+    public float life;
 }

@@ -1,4 +1,7 @@
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public enum BossAttackPattern
 {
@@ -14,29 +17,34 @@ public class BossController : MonoBehaviour
 
     public static BossController Instance => instance;
 
-    [Range(0f, 1f)] public float normalFireIntensityDuringBoss = 0.25f;
-    [Min(0.1f)] public float baseAttackInterval = 1.2f;
-    [Min(1f)] public float bossVisualScale = 2.5f;
-    public string bossVisualResource = "Airplane/Airplane5";
-    public string[] bossVisualResources =
+    [FormerlySerializedAs("normalFireIntensityDuringBoss")]
+    [Range(0f, 1f)] public float bossFireScale = 0.25f;
+    [FormerlySerializedAs("baseAttackInterval")]
+    [Min(0.1f)] public float fireGap = 1.2f;
+    [FormerlySerializedAs("bossVisualScale")]
+    [Min(1f)] public float bossScale = 2.5f;
+    [FormerlySerializedAs("bossVisualResource")]
+    public string bossPath = "Airplane/Airplane5";
+    [FormerlySerializedAs("bossVisualResources")]
+    public string[] bossPaths =
     {
         "Bosses/CrimsonManta",
         "Bosses/AzureBastion",
         "Bosses/SolarSeraph",
     };
 
-    public bool IsBossActive { get; private set; }
-    public int ActiveRound { get; private set; }
-    public BossAttackPattern CurrentPattern { get; private set; }
-    public int SpawnedBulletCount { get; private set; }
+    public bool BossActive { get; private set; }
+    public int BossRound { get; private set; }
+    public BossAttackPattern Pattern { get; private set; }
+    public int BulletCount { get; private set; }
 
-    private GameFlowManager flowManager;
-    private GameObject bossObject;
-    private float attackTimer;
-    private float spiralAngle;
-    private int volleyIndex;
+    private GameFlowManager flow;
+    private GameObject boss;
+    private float fireTimer;
+    private float spin;
+    private int volley;
 
-    public static BossController EnsureInstance(GameObject host = null)
+    public static BossController Ensure(GameObject host = null)
     {
         if (instance != null)
             return instance;
@@ -50,19 +58,17 @@ public class BossController : MonoBehaviour
     {
         if (instance != null && instance != this)
         {
-            DestroyComponent(this);
+            DestroyNow(this);
             return;
         }
 
         instance = this;
-        normalFireIntensityDuringBoss = Mathf.Clamp01(normalFireIntensityDuringBoss);
-        baseAttackInterval = Mathf.Max(0.1f, baseAttackInterval);
-        bossVisualScale = Mathf.Max(1f, bossVisualScale);
-        BindFlowManager();
+        ClampValues();
+        BindFlow();
 
-        if (flowManager != null)
+        if (flow != null)
         {
-            HandleFlowStateChanged(flowManager.State);
+            OnFlowState(flow.State);
         }
     }
 
@@ -71,105 +77,99 @@ public class BossController : MonoBehaviour
         if (instance != this)
             return;
 
-        if (flowManager != null)
+        if (flow != null)
         {
-            flowManager.StateChanged -= HandleFlowStateChanged;
+            flow.StateUpdated -= OnFlowState;
         }
 
-        EndBoss();
-        FireObject.SetGlobalIntensityScale(1f);
+        StopBoss();
+        FireObject.SetIntensity(1f);
 
         instance = null;
     }
 
     private void OnValidate()
     {
-        normalFireIntensityDuringBoss = Mathf.Clamp01(normalFireIntensityDuringBoss);
-        baseAttackInterval = Mathf.Max(0.1f, baseAttackInterval);
-        bossVisualScale = Mathf.Max(1f, bossVisualScale);
+        ClampValues();
     }
 
     private void Update()
     {
-        if (flowManager == null)
+        if (flow == null)
         {
-            BindFlowManager();
+            BindFlow();
         }
 
-        if (flowManager == null || flowManager.State != GameFlowState.BossSurvival || !IsBossActive)
+        if (flow == null || flow.State != GameFlowState.BossSurvival || !BossActive)
             return;
 
-        UpdateBossPosition();
+        MoveBoss();
 
-        float progress = flowManager.bossDuration <= 0f
+        float progress = flow.bossTime <= 0f
             ? 0f
-            : flowManager.StateElapsedTime / flowManager.bossDuration;
-        BossAttackPattern nextPattern = GetPatternAtNormalizedTime(progress);
-        if (nextPattern != CurrentPattern)
+            : flow.StateTime / flow.bossTime;
+        BossAttackPattern next = PatternAt(progress);
+        if (next != Pattern)
         {
-            CurrentPattern = nextPattern;
-            attackTimer = 0f;
+            Pattern = next;
+            fireTimer = 0f;
         }
 
-        attackTimer -= Time.deltaTime;
-        if (attackTimer > 0f)
+        fireTimer -= Time.deltaTime;
+        if (fireTimer > 0f)
             return;
 
-        FireCurrentPattern();
-        attackTimer = GameDataMgr.Instance.GetBossFireInterval(baseAttackInterval);
+        FirePattern();
+        fireTimer = GameDataMgr.Instance.BossFireGap(fireGap);
     }
 
-    public BossAttackPattern GetPatternAtNormalizedTime(float normalizedTime)
+    public BossAttackPattern PatternAt(float progress)
     {
-        float progress = Mathf.Clamp01(normalizedTime);
-        if (progress < 0.25f)
+        float time = Mathf.Clamp01(progress);
+        if (time < 0.25f)
             return BossAttackPattern.Fan;
-        if (progress < 0.5f)
+        if (time < 0.5f)
             return BossAttackPattern.Spiral;
-        if (progress < 0.75f)
+        if (time < 0.75f)
             return BossAttackPattern.Cross;
         return BossAttackPattern.Homing;
     }
 
-    public int GetPrimaryVolleyBulletCount(BossAttackPattern pattern, int round)
+    public int VolleySize(BossAttackPattern pattern, int round)
     {
-        int safeRound = Mathf.Max(1, round);
-        switch (pattern)
-        {
-            case BossAttackPattern.Fan:
-                return Mathf.Min(5 + (safeRound - 1) * 2, 13);
-            case BossAttackPattern.Spiral:
-                return Mathf.Min(4 + safeRound, 10);
-            case BossAttackPattern.Cross:
-                return safeRound >= 2 ? 8 : 4;
-            case BossAttackPattern.Homing:
-                return Mathf.Min(2 + safeRound, 6);
-            default:
-                return 1;
-        }
+        int level = Mathf.Max(1, round);
+        if (pattern == BossAttackPattern.Fan)
+            return Mathf.Min(3 + level * 2, 13);
+        if (pattern == BossAttackPattern.Spiral)
+            return Mathf.Min(4 + level, 10);
+        if (pattern == BossAttackPattern.Cross)
+            return level >= 2 ? 8 : 4;
+        if (pattern == BossAttackPattern.Homing)
+            return Mathf.Min(2 + level, 6);
+        return 1;
     }
 
-    public string GetBossVisualResource(int round)
+    public string BossPath(int round)
     {
-        if (string.IsNullOrEmpty(bossVisualResource))
+        if (string.IsNullOrEmpty(bossPath))
             return string.Empty;
 
-        if (bossVisualResources != null && bossVisualResources.Length > 0)
+        if (bossPaths != null && bossPaths.Length > 0)
         {
-            int index = (Mathf.Max(1, round) - 1) % bossVisualResources.Length;
-            string selectedResource = bossVisualResources[index];
-            if (!string.IsNullOrEmpty(selectedResource))
+            int index = (Mathf.Max(1, round) - 1) % bossPaths.Length;
+            string selected = bossPaths[index];
+            if (!string.IsNullOrEmpty(selected))
             {
-                return selectedResource;
+                return selected;
             }
         }
 
-        return bossVisualResource;
+        return bossPath;
     }
 
-    public string GetPatternName()
+    public string PatternName()
     {
-        switch (CurrentPattern)
+        switch (Pattern)
         {
             case BossAttackPattern.Fan:
                 return "扇形";
@@ -184,292 +184,277 @@ public class BossController : MonoBehaviour
         }
     }
 
-    private void BindFlowManager()
+    private void ClampValues()
     {
-        GameFlowManager nextFlow = GetComponent<GameFlowManager>();
-        if (nextFlow == null)
+        bossFireScale = Mathf.Clamp01(bossFireScale);
+        fireGap = Mathf.Max(0.1f, fireGap);
+        bossScale = Mathf.Max(1f, bossScale);
+    }
+
+    private void BindFlow()
+    {
+        GameFlowManager next = GetComponent<GameFlowManager>();
+        if (next == null)
         {
-            nextFlow = GameFlowManager.Instance;
+            next = GameFlowManager.Instance;
         }
 
-        if (flowManager == nextFlow)
+        if (flow == next)
             return;
 
-        if (flowManager != null)
+        if (flow != null)
         {
-            flowManager.StateChanged -= HandleFlowStateChanged;
+            flow.StateUpdated -= OnFlowState;
         }
 
-        flowManager = nextFlow;
-        if (flowManager != null)
+        flow = next;
+        if (flow != null)
         {
-            flowManager.StateChanged += HandleFlowStateChanged;
-        }
-    }
-
-    private void HandleFlowStateChanged(GameFlowState state)
-    {
-        switch (state)
-        {
-            case GameFlowState.BossWarning:
-                FireObject.SetGlobalIntensityScale(normalFireIntensityDuringBoss);
-                break;
-            case GameFlowState.BossSurvival:
-                FireObject.SetGlobalIntensityScale(normalFireIntensityDuringBoss);
-                if (!IsBossActive)
-                {
-                    BeginBoss();
-                }
-                break;
-            case GameFlowState.Normal:
-                EndBoss();
-                FireObject.SetGlobalIntensityScale(1f);
-                break;
-            case GameFlowState.GameOver:
-                EndBoss();
-                break;
+            flow.StateUpdated += OnFlowState;
         }
     }
 
-    private void BeginBoss()
+    private void OnFlowState(GameFlowState state)
     {
-        IsBossActive = true;
-        ActiveRound = flowManager != null ? Mathf.Max(1, flowManager.CurrentBossRound) : 1;
-        CurrentPattern = BossAttackPattern.Fan;
-        SpawnedBulletCount = 0;
-        attackTimer = 0f;
-        spiralAngle = 0f;
-        volleyIndex = 0;
-        CreateBossVisual();
+        if (state == GameFlowState.BossWarning || state == GameFlowState.BossSurvival)
+        {
+            FireObject.SetIntensity(bossFireScale);
+        }
+
+        if (state == GameFlowState.BossSurvival && !BossActive)
+        {
+            StartBoss();
+        }
+        else if (state == GameFlowState.Normal)
+        {
+            StopBoss();
+            FireObject.SetIntensity(1f);
+        }
+        else if (state == GameFlowState.GameOver)
+        {
+            StopBoss();
+        }
     }
 
-    private void EndBoss()
+    private void StartBoss()
     {
-        BulletObject.ClearBossBullets();
+        BossActive = true;
+        BossRound = flow != null ? Mathf.Max(1, flow.BossRound) : 1;
+        Pattern = BossAttackPattern.Fan;
+        BulletCount = 0;
+        fireTimer = 0f;
+        spin = 0f;
+        volley = 0;
+        SpawnVisual();
+    }
 
-        if (bossObject != null)
+    private void StopBoss()
+    {
+        BulletObject.ClearBoss();
+
+        if (boss != null)
         {
-            if (!ObjectPoolManager.TryRelease(bossObject))
+            if (!ObjectPoolManager.TryRelease(boss))
             {
-                DestroyObject(bossObject);
+                DestroyNow(boss);
             }
-            bossObject = null;
+            boss = null;
         }
 
-        IsBossActive = false;
-        ActiveRound = 0;
-        attackTimer = 0f;
+        BossActive = false;
+        BossRound = 0;
+        fireTimer = 0f;
     }
 
-    private void CreateBossVisual()
+    private void SpawnVisual()
     {
-        string visualResource = GetBossVisualResource(ActiveRound);
-        GameObject prefab = string.IsNullOrEmpty(visualResource)
+        string path = BossPath(BossRound);
+        GameObject prefab = string.IsNullOrEmpty(path)
             ? null
-            : Resources.Load<GameObject>(visualResource);
+            : Resources.Load<GameObject>(path);
 
         if (prefab != null)
         {
-            bossObject = ObjectPoolManager.EnsureInstance().SpawnResource(
-                visualResource,
+            boss = ObjectPoolManager.Ensure().SpawnAsset(
+                path,
                 Vector3.zero,
                 Quaternion.identity);
         }
         else
         {
-            bossObject = new GameObject("BossVisual");
+            boss = new GameObject("BossVisual");
         }
 
-        bossObject.name = "SurvivalBoss_Round" + ActiveRound;
-        bossObject.tag = "Untagged";
-        bossObject.transform.localScale = Vector3.one * bossVisualScale;
-        bossObject.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+        boss.name = "SurvivalBoss_Round" + BossRound;
+        boss.tag = "Untagged";
+        boss.transform.localScale = Vector3.one * bossScale;
+        boss.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
 
-        Collider[] colliders = bossObject.GetComponentsInChildren<Collider>();
+        Collider[] colliders = boss.GetComponentsInChildren<Collider>();
         for (int i = 0; i < colliders.Length; i++)
         {
             colliders[i].enabled = false;
         }
 
-        Rigidbody[] rigidbodies = bossObject.GetComponentsInChildren<Rigidbody>();
-        for (int i = 0; i < rigidbodies.Length; i++)
+        Rigidbody[] bodies = boss.GetComponentsInChildren<Rigidbody>();
+        for (int i = 0; i < bodies.Length; i++)
         {
-            rigidbodies[i].isKinematic = true;
-            rigidbodies[i].detectCollisions = false;
+            bodies[i].isKinematic = true;
+            bodies[i].detectCollisions = false;
         }
 
-        UpdateBossPosition();
+        MoveBoss();
     }
 
-    private void UpdateBossPosition()
+    private void MoveBoss()
     {
-        if (bossObject == null)
+        if (boss == null)
             return;
 
-        float horizontalOffset = Mathf.Sin(Time.time * 0.7f) * 0.13f;
-        bossObject.transform.position = GetArenaPosition(0.5f + horizontalOffset, 0.82f);
+        float offset = Mathf.Sin(Time.time * 0.7f) * 0.13f;
+        boss.transform.position = ArenaPos(0.5f + offset, 0.82f);
     }
 
-    private Vector3 GetArenaPosition(float viewportX, float viewportY)
+    private Vector3 ArenaPos(float x, float y)
     {
-        if (Camera.main == null)
+        Camera camera = Camera.main;
+        if (camera == null)
             return new Vector3(0f, 0f, 80f);
 
-        float distance = Mathf.Abs(Camera.main.transform.position.y);
-        Vector3 screenPosition = new Vector3(
-            Screen.width * Mathf.Clamp01(viewportX),
-            Screen.height * Mathf.Clamp01(viewportY),
+        float distance = Mathf.Abs(camera.transform.position.y);
+        Vector3 point = new Vector3(
+            Screen.width * Mathf.Clamp01(x),
+            Screen.height * Mathf.Clamp01(y),
             distance);
-        return Camera.main.ScreenToWorldPoint(screenPosition);
+        return camera.ScreenToWorldPoint(point);
     }
 
-    private void FireCurrentPattern()
+    private void FirePattern()
     {
-        switch (CurrentPattern)
+        int count = VolleySize(Pattern, BossRound);
+        if (Pattern == BossAttackPattern.Fan)
+            ShootFan(count);
+        else if (Pattern == BossAttackPattern.Spiral)
+            ShootSpiral(count);
+        else if (Pattern == BossAttackPattern.Cross)
+            ShootCross(count);
+        else if (Pattern == BossAttackPattern.Homing)
+            ShootHoming(count);
+
+        volley++;
+        if (BossRound >= 2 && Pattern != BossAttackPattern.Cross && volley % 2 == 0)
         {
-            case BossAttackPattern.Fan:
-                FireFan(GetPrimaryVolleyBulletCount(CurrentPattern, ActiveRound));
-                break;
-            case BossAttackPattern.Spiral:
-                FireSpiral(GetPrimaryVolleyBulletCount(CurrentPattern, ActiveRound));
-                break;
-            case BossAttackPattern.Cross:
-                FireCross(GetPrimaryVolleyBulletCount(CurrentPattern, ActiveRound));
-                break;
-            case BossAttackPattern.Homing:
-                FireHoming(GetPrimaryVolleyBulletCount(CurrentPattern, ActiveRound));
-                break;
+            ShootCross(4);
         }
 
-        volleyIndex++;
-        if (ActiveRound >= 2 && CurrentPattern != BossAttackPattern.Cross && volleyIndex % 2 == 0)
+        if (BossRound >= 3 && Pattern != BossAttackPattern.Homing && volley % 3 == 0)
         {
-            FireCross(4);
-        }
-
-        if (ActiveRound >= 3 && CurrentPattern != BossAttackPattern.Homing && volleyIndex % 3 == 0)
-        {
-            FireHoming(1);
+            ShootHoming(1);
         }
     }
 
-    private void FireFan(int count)
+    private void ShootFan(int count)
     {
-        Vector3 aimDirection = GetPlayerDirection();
-        float span = Mathf.Min(70f + (ActiveRound - 1) * 8f, 120f);
+        Vector3 aim = PlayerDir();
+        float span = Mathf.Min(70f + (BossRound - 1) * 8f, 120f);
         for (int i = 0; i < count; i++)
         {
             float angle = count <= 1 ? 0f : Mathf.Lerp(-span * 0.5f, span * 0.5f, i / (count - 1f));
-            Vector3 direction = Quaternion.AngleAxis(angle, Vector3.up) * aimDirection;
-            CreateBossBullet(GetStraightBulletId(), direction);
+            Vector3 dir = Quaternion.AngleAxis(angle, Vector3.up) * aim;
+            SpawnBullet(StraightId(), dir);
         }
     }
 
-    private void FireSpiral(int count)
+    private void ShootSpiral(int count)
     {
-        float angleStep = 360f / count;
+        float step = 360f / count;
         for (int i = 0; i < count; i++)
         {
-            Vector3 direction = Quaternion.AngleAxis(spiralAngle + angleStep * i, Vector3.up) * Vector3.forward;
-            int bulletId = i % 2 == 0 ? 9 + GetColorIndex() : 13 + GetColorIndex();
-            CreateBossBullet(bulletId, direction);
+            Vector3 dir = Quaternion.AngleAxis(spin + step * i, Vector3.up) * Vector3.forward;
+            int id = i % 2 == 0 ? 9 + ColorIndex() : 13 + ColorIndex();
+            SpawnBullet(id, dir);
         }
 
-        spiralAngle = (spiralAngle + 18f + ActiveRound * 3f) % 360f;
+        spin = (spin + 18f + BossRound * 3f) % 360f;
     }
 
-    private void FireCross(int count)
+    private void ShootCross(int count)
     {
-        float angleStep = 360f / count;
-        float baseAngle = volleyIndex * (7f + ActiveRound);
+        float step = 360f / count;
+        float start = volley * (7f + BossRound);
         for (int i = 0; i < count; i++)
         {
-            Vector3 direction = Quaternion.AngleAxis(baseAngle + angleStep * i, Vector3.up) * Vector3.forward;
-            CreateBossBullet(GetStraightBulletId(), direction);
+            Vector3 dir = Quaternion.AngleAxis(start + step * i, Vector3.up) * Vector3.forward;
+            SpawnBullet(StraightId(), dir);
         }
     }
 
-    private void FireHoming(int count)
+    private void ShootHoming(int count)
     {
-        Vector3 aimDirection = GetPlayerDirection();
+        Vector3 aim = PlayerDir();
         for (int i = 0; i < count; i++)
         {
             float center = (count - 1) * 0.5f;
             float angle = (i - center) * 12f;
-            Vector3 direction = Quaternion.AngleAxis(angle, Vector3.up) * aimDirection;
-            CreateBossBullet(17 + GetColorIndex(), direction);
+            Vector3 dir = Quaternion.AngleAxis(angle, Vector3.up) * aim;
+            SpawnBullet(17 + ColorIndex(), dir);
         }
     }
 
-    private Vector3 GetPlayerDirection()
+    private Vector3 PlayerDir()
     {
-        if (bossObject != null && PlayerObject.Instance != null)
+        if (boss != null && PlayerObject.Instance != null)
         {
-            Vector3 direction = PlayerObject.Instance.transform.position - bossObject.transform.position;
-            if (direction.sqrMagnitude > 0.001f)
+            Vector3 dir = PlayerObject.Instance.transform.position - boss.transform.position;
+            if (dir.sqrMagnitude > 0.001f)
             {
-                return direction.normalized;
+                return dir.normalized;
             }
         }
 
         return Vector3.back;
     }
 
-    private int GetStraightBulletId()
+    private int StraightId()
     {
-        return 1 + GetColorIndex();
+        return 1 + ColorIndex();
     }
 
-    private int GetColorIndex()
+    private int ColorIndex()
     {
-        return (Mathf.Max(1, ActiveRound) - 1) % 4;
+        return (Mathf.Max(1, BossRound) - 1) % 4;
     }
 
-    private void CreateBossBullet(int bulletId, Vector3 direction)
+    private void SpawnBullet(int id, Vector3 dir)
     {
-        if (bossObject == null || direction.sqrMagnitude < 0.001f)
+        if (boss == null || dir.sqrMagnitude < 0.001f)
             return;
 
-        BulletInfo info = GameDataMgr.Instance.GetBulletInfoById(bulletId);
-        if (info == null || string.IsNullOrEmpty(info.resName))
+        BulletInfo info = GameDataMgr.Instance.GetBullet(id);
+        if (info == null || string.IsNullOrEmpty(info.asset))
             return;
 
-        GameObject bullet = ObjectPoolManager.EnsureInstance().SpawnResource(
-            info.resName,
-            bossObject.transform.position,
+        GameObject bullet = ObjectPoolManager.Ensure().SpawnAsset(
+            info.asset,
+            boss.transform.position,
             Quaternion.identity);
         if (bullet == null)
             return;
 
-        BulletObject bulletObject = bullet.GetComponent<BulletObject>();
-        if (bulletObject == null)
+        BulletObject shot = bullet.GetComponent<BulletObject>();
+        if (shot == null)
         {
-            bulletObject = bullet.AddComponent<BulletObject>();
+            shot = bullet.AddComponent<BulletObject>();
         }
 
-        Vector3 normalizedDirection = direction.normalized;
-        bullet.transform.position = bossObject.transform.position + normalizedDirection * 7f;
-        bullet.transform.rotation = Quaternion.LookRotation(normalizedDirection);
-        bulletObject.InitInfo(info, BulletSource.Boss, GameDataMgr.Instance.GetBossBulletSpeedMul());
-        SpawnedBulletCount++;
+        dir.Normalize();
+        bullet.transform.position = boss.transform.position + dir * 7f;
+        bullet.transform.rotation = Quaternion.LookRotation(dir);
+        shot.Init(info, BulletSource.Boss, GameDataMgr.Instance.BossBulletSpeed());
+        BulletCount++;
     }
 
-    private static void DestroyObject(GameObject target)
-    {
-        if (target == null)
-            return;
-
-        if (Application.isPlaying)
-        {
-            Destroy(target);
-        }
-        else
-        {
-            DestroyImmediate(target);
-        }
-    }
-
-    private static void DestroyComponent(Component target)
+    private static void DestroyNow(Object target)
     {
         if (target == null)
             return;

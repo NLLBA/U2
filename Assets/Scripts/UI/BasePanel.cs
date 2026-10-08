@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public abstract class BasePanel<T> : MonoBehaviour where T:class
+public abstract class BasePanel<T> : MonoBehaviour where T : class
 {
     private static T instance;
 
@@ -13,8 +13,7 @@ public abstract class BasePanel<T> : MonoBehaviour where T:class
         instance = this as T;
     }
 
-    // Start is called before the first frame update
-    void Start()
+    private void Start()
     {
         Init();
     }
@@ -23,13 +22,11 @@ public abstract class BasePanel<T> : MonoBehaviour where T:class
 
     public virtual void Showme()
     {
-        this.gameObject.SetActive(true);
+        gameObject.SetActive(true);
     }
 
     public virtual void Hideme()
     {
-        this.gameObject.SetActive(false);
+        gameObject.SetActive(false);
     }
-
-
 }

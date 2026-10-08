@@ -1,31 +1,35 @@
-using System.Collections;
 using System.Collections.Generic;
 using System.Xml.Serialization;
-using UnityEngine;
 
-public class FireData 
+public class FireData
 {
-    public List<FireInfo> fireInfoList = new List<FireInfo>();
+    [XmlArray("fireInfoList")]
+    public List<FireInfo> fires = new List<FireInfo>();
 }
 
 public class FireInfo
 {
-    //·¢»ğµãID
+    // å‘ç«ç‚¹ IDã€‚
     [XmlAttribute]
     public int id;
-    //·¢»ğµãÀàĞÍ
+
+    // å‘ç«ç‚¹ç±»å‹ã€‚
     [XmlAttribute]
     public int type;
-    //ÊıÁ¿ ¸Ã×é×Óµ¯ ÓĞ¶àÉÙ¿Å
+
+    // è¯¥ç»„çš„å­å¼¹æ•°é‡ã€‚
     [XmlAttribute]
     public int num;
-    //Ã¿¿ÅµÄ¼ä¸ôÊ±¼ä
+
+    // æ¯é¢—å­å¼¹çš„é—´éš”æ—¶é—´ã€‚
     [XmlAttribute]
     public float cd;
-    //¹ØÁªµÄ ×Óµ¯ID
+
+    // å…³è”çš„å­å¼¹ IDã€‚
     [XmlAttribute]
     public string ids;
-    //×é¼ä ¼ä¸ôÊ±¼ä
+
+    // ç»„é—´éš”æ—¶é—´ã€‚
     [XmlAttribute]
     public float delay;
 }

@@ -1,3 +1,5 @@
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class DifficultyStatusLabel : MonoBehaviour
@@ -13,7 +15,7 @@ public class DifficultyStatusLabel : MonoBehaviour
     {
         if (label != null)
         {
-            label.text = "当前难度：" + GameDataMgr.Instance.GetDifficultyName();
+            label.text = "当前难度：" + GameDataMgr.Instance.DifficultyName();
         }
     }
 }

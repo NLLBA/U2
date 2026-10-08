@@ -20,8 +20,8 @@ public class Stage9ValidationTests
     public void SetUp()
     {
         Time.timeScale = 1f;
-        originalHeroIndex = GameDataMgr.Instance.nowSelHeroIndex;
-        originalDifficultyIndex = GameDataMgr.Instance.nowDifficultyIndex;
+        originalHeroIndex = GameDataMgr.Instance.heroIndex;
+        originalDifficultyIndex = GameDataMgr.Instance.difficultyIndex;
         temporaryDirectory = Path.Combine(
             Path.GetTempPath(),
             "U2Stage9-" + Guid.NewGuid().ToString("N"));
@@ -30,14 +30,14 @@ public class Stage9ValidationTests
         host = new GameObject("Stage9ValidationTests");
         director = host.AddComponent<DifficultyDirector>();
         boss = host.AddComponent<BossController>();
-        boss.bossVisualResource = string.Empty;
+        boss.bossPath = string.Empty;
     }
 
     [TearDown]
     public void TearDown()
     {
         Time.timeScale = 1f;
-        GameDataMgr.Instance.nowSelHeroIndex = originalHeroIndex;
+        GameDataMgr.Instance.heroIndex = originalHeroIndex;
         GameDataMgr.Instance.SetDifficulty(originalDifficultyIndex);
         if (host != null)
         {
@@ -54,8 +54,8 @@ public class Stage9ValidationTests
     {
         Stage9BalanceReport report = BuildReport(60);
 
-        Assert.AreEqual(3, GameDataMgr.Instance.difficultyData.difficultyInfos.Count);
-        Assert.AreEqual(5, GameDataMgr.Instance.roleData.roleDatas.Count);
+        Assert.AreEqual(3, GameDataMgr.Instance.difficultyData.difficulties.Count);
+        Assert.AreEqual(5, GameDataMgr.Instance.roleData.roles.Count);
         Assert.AreEqual(12, report.PressureSnapshots.Count);
         Assert.AreEqual(15, report.SimulationResults.Count);
 
@@ -152,10 +152,10 @@ public class Stage9ValidationTests
         Assert.IsNotNull(gameOver.btnSure);
         Assert.IsNotNull(gameOver.btnRestart);
 
-        for (int i = 0; i < GameDataMgr.Instance.roleData.roleDatas.Count; i++)
+        for (int i = 0; i < GameDataMgr.Instance.roleData.roles.Count; i++)
         {
             Assert.IsNotNull(
-                Resources.Load<GameObject>(GameDataMgr.Instance.roleData.roleDatas[i].resName),
+                Resources.Load<GameObject>(GameDataMgr.Instance.roleData.roles[i].asset),
                 "Missing aircraft resource " + (i + 1));
         }
     }
@@ -164,63 +164,63 @@ public class Stage9ValidationTests
     public void SelectionToSecondBossSettlementPersistsAfterXmlReload()
     {
         GameDataMgr data = GameDataMgr.Instance;
-        data.nowSelHeroIndex = 4;
+        data.heroIndex = 4;
         data.SetDifficulty(3);
-        Assert.AreEqual("Airplane/Airplane5", data.GetNowSelHeroInfo().resName);
-        Assert.AreEqual(3, data.GetNowDifficultyInfo().id);
+        Assert.AreEqual("Airplane/Airplane5", data.GetHero().asset);
+        Assert.AreEqual(3, data.GetDifficulty().id);
 
         GameFlowManager flow = host.AddComponent<GameFlowManager>();
         ScoreManager score = host.AddComponent<ScoreManager>();
-        flow.ResetFlow();
+        flow.Reset();
 
-        flow.AdvanceFlow(150f);
-        Assert.AreEqual(1, flow.CompletedBossRounds);
+        flow.Advance(150f);
+        Assert.AreEqual(1, flow.BossRounds);
         Assert.AreEqual(GameFlowState.Normal, flow.State);
         Assert.Greater(director.ThreatLevel, 1);
 
-        flow.AdvanceFlow(100f);
+        flow.Advance(100f);
         Assert.AreEqual(GameFlowState.BossSurvival, flow.State);
-        Assert.AreEqual(2, flow.CurrentBossRound);
+        Assert.AreEqual(2, flow.BossRound);
         for (int i = 0; i < 12; i++)
         {
-            Assert.IsTrue(score.RegisterManualBulletClear());
+            Assert.IsTrue(score.RegisterClear());
         }
 
-        flow.EnterGameOver();
-        Assert.IsTrue(score.IsFinalized);
-        Assert.Greater(score.FinalScore, 0);
-        Assert.IsFalse(score.RegisterManualBulletClear());
+        flow.GameOver();
+        Assert.IsTrue(score.Finished);
+        Assert.Greater(score.TotalScore, 0);
+        Assert.IsFalse(score.RegisterClear());
 
         RankData rankData = new RankData();
-        rankData.rankInfos.Add(new RankInfo
+        rankData.ranks.Add(new RankInfo
         {
             name = "Stage9Pilot",
-            finalScore = score.FinalScore,
-            survivalTime = Mathf.FloorToInt(score.SurvivalTime),
-            difficulty = data.GetDifficultyName(),
-            bossRounds = score.CompletedBossRounds,
-            clearedBullets = score.ManualClearedBullets,
-            recordTime = "2026-08-02 22:30:00",
+            score = score.TotalScore,
+            runTime = Mathf.FloorToInt(score.RunTime),
+            difficulty = data.DifficultyName(),
+            bosses = score.BossRounds,
+            clears = score.ClearCount,
+            date = "2026-08-02 22:30:00",
         });
-        rankData.NormalizeAndSort();
+        rankData.Sort();
 
         string rankPath = Path.Combine(temporaryDirectory, "RankData.xml");
-        XmlDataMgr.Instance.SaveDataToPath(rankData, rankPath);
-        RankData reloaded = XmlDataMgr.Instance.LoadDataFromPaths(
+        XmlDataMgr.Instance.SavePath(rankData, rankPath);
+        RankData reloaded = XmlDataMgr.Instance.LoadPaths(
             typeof(RankData),
             rankPath,
             string.Empty) as RankData;
 
         Assert.IsNotNull(reloaded);
-        reloaded.NormalizeAndSort();
-        Assert.AreEqual(1, reloaded.rankInfos.Count);
-        RankInfo saved = reloaded.rankInfos[0];
+        reloaded.Sort();
+        Assert.AreEqual(1, reloaded.ranks.Count);
+        RankInfo saved = reloaded.ranks[0];
         Assert.AreEqual("Stage9Pilot", saved.name);
-        Assert.AreEqual(score.FinalScore, saved.finalScore);
-        Assert.AreEqual(250, saved.survivalTime);
+        Assert.AreEqual(score.TotalScore, saved.score);
+        Assert.AreEqual(250, saved.runTime);
         Assert.AreEqual("困难", saved.difficulty);
-        Assert.AreEqual(1, saved.bossRounds);
-        Assert.AreEqual(12, saved.clearedBullets);
+        Assert.AreEqual(1, saved.bosses);
+        Assert.AreEqual(12, saved.clears);
     }
 
     private Stage9BalanceReport BuildReport(int trials)

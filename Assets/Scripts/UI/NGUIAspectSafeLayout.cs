@@ -1,4 +1,7 @@
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 [ExecuteAlways]
 [DisallowMultipleComponent]
@@ -6,50 +9,55 @@ using UnityEngine;
 [DefaultExecutionOrder(-200)]
 public sealed class NGUIAspectSafeLayout : MonoBehaviour
 {
-    public const int DefaultReferenceWidth = 1920;
-    public const int DefaultReferenceHeight = 1080;
+    public const int DefaultWidth = 1920;
+    public const int DefaultHeight = 1080;
 
     [SerializeField] private Camera uiCamera;
-    [SerializeField] private int referenceWidth = DefaultReferenceWidth;
-    [SerializeField] private int referenceHeight = DefaultReferenceHeight;
-    [SerializeField] private float referenceVerticalFieldOfView = 60f;
-    [SerializeField] private float referenceOrthographicSize = 1f;
-    [SerializeField] private bool respectScreenSafeArea = true;
+    [FormerlySerializedAs("referenceWidth")]
+    [SerializeField] private int refWidth = DefaultWidth;
+    [FormerlySerializedAs("referenceHeight")]
+    [SerializeField] private int refHeight = DefaultHeight;
+    [FormerlySerializedAs("referenceVerticalFieldOfView")]
+    [SerializeField] private float refFov = 60f;
+    [FormerlySerializedAs("referenceOrthographicSize")]
+    [SerializeField] private float refSize = 1f;
+    [FormerlySerializedAs("respectScreenSafeArea")]
+    [SerializeField] private bool useSafeArea = true;
 
     private UIRoot uiRoot;
-    private int lastSurfaceWidth = -1;
-    private int lastSurfaceHeight = -1;
-    private Rect lastSafeArea = new Rect(-1f, -1f, -1f, -1f);
-    private Rect lastCameraRect = new Rect(-1f, -1f, -1f, -1f);
-    private RenderTexture lastTargetTexture;
+    private int lastWidth = -1;
+    private int lastHeight = -1;
+    private Rect lastSafe = new Rect(-1f, -1f, -1f, -1f);
+    private Rect lastRect = new Rect(-1f, -1f, -1f, -1f);
+    private RenderTexture lastTexture;
 
     public Camera UiCamera => uiCamera;
-    public int ReferenceWidth => referenceWidth;
-    public int ReferenceHeight => referenceHeight;
-    public float ReferenceVerticalFieldOfView => referenceVerticalFieldOfView;
-    public bool RespectScreenSafeArea => respectScreenSafeArea;
+    public int RefWidth => refWidth;
+    public int RefHeight => refHeight;
+    public float ReferenceFov => refFov;
+    public bool UseSafeArea => useSafeArea;
 
     private void Awake()
     {
-        CacheComponents();
-        ApplyLayout();
+        Cache();
+        Apply();
     }
 
     private void OnEnable()
     {
-        CacheComponents();
-        ApplyLayout();
+        Cache();
+        Apply();
     }
 
     private void OnValidate()
     {
-        referenceWidth = Mathf.Max(1, referenceWidth);
-        referenceHeight = Mathf.Max(1, referenceHeight);
-        referenceVerticalFieldOfView = Mathf.Clamp(referenceVerticalFieldOfView, 1f, 179f);
-        referenceOrthographicSize = Mathf.Max(0.01f, referenceOrthographicSize);
+        refWidth = Mathf.Max(1, refWidth);
+        refHeight = Mathf.Max(1, refHeight);
+        refFov = Mathf.Clamp(refFov, 1f, 179f);
+        refSize = Mathf.Max(0.01f, refSize);
 
         if (isActiveAndEnabled)
-            ApplyLayout();
+            Apply();
     }
 
     private void LateUpdate()
@@ -57,109 +65,109 @@ public sealed class NGUIAspectSafeLayout : MonoBehaviour
         int width;
         int height;
         Rect safeArea;
-        GetSurfaceMetrics(out width, out height, out safeArea);
+        GetSurface(out width, out height, out safeArea);
         RenderTexture targetTexture = uiCamera != null ? uiCamera.targetTexture : null;
-        if (width != lastSurfaceWidth || height != lastSurfaceHeight ||
-            safeArea != lastSafeArea || lastTargetTexture != targetTexture ||
-            (uiCamera != null && uiCamera.rect != lastCameraRect))
+        if (width != lastWidth || height != lastHeight ||
+            safeArea != lastSafe || lastTexture != targetTexture ||
+            (uiCamera != null && uiCamera.rect != lastRect))
         {
-            ApplyLayout();
+            Apply();
         }
     }
 
-    public void Configure(Camera camera, int width = DefaultReferenceWidth, int height = DefaultReferenceHeight)
+    public void Configure(Camera camera, int width = DefaultWidth, int height = DefaultHeight)
     {
         uiCamera = camera;
-        referenceWidth = Mathf.Max(1, width);
-        referenceHeight = Mathf.Max(1, height);
+        refWidth = Mathf.Max(1, width);
+        refHeight = Mathf.Max(1, height);
 
         if (uiCamera != null)
         {
             if (uiCamera.orthographic)
-                referenceOrthographicSize = Mathf.Max(0.01f, uiCamera.orthographicSize);
+                refSize = Mathf.Max(0.01f, uiCamera.orthographicSize);
             else
             {
-                float planeDistance = GetPerspectivePlaneDistance();
-                referenceVerticalFieldOfView = planeDistance > 0.01f
-                    ? CalculatePerspectiveFieldOfView(width, height, (float)width / height, planeDistance)
+                float planeDistance = PlaneDistance();
+                refFov = planeDistance > 0.01f
+                    ? PerspectiveFov(width, height, (float)width / height, planeDistance)
                     : Mathf.Clamp(uiCamera.fieldOfView, 1f, 179f);
             }
         }
 
-        CacheComponents();
-        ConfigureRoot();
+        Cache();
+        SetupRoot();
     }
 
-    public void ApplyLayout()
+    public void Apply()
     {
-        CacheComponents();
+        Cache();
         if (uiRoot == null || uiCamera == null)
             return;
 
-        ConfigureRoot();
+        SetupRoot();
         uiRoot.UpdateScale(false);
 
         int surfaceWidth;
         int surfaceHeight;
         Rect safeArea;
-        GetSurfaceMetrics(out surfaceWidth, out surfaceHeight, out safeArea);
+        GetSurface(out surfaceWidth, out surfaceHeight, out safeArea);
         if (surfaceWidth <= 0 || surfaceHeight <= 0 || safeArea.width <= 0f || safeArea.height <= 0f)
             return;
 
-        Rect viewport = CalculateViewport(surfaceWidth, surfaceHeight, safeArea);
+        Rect viewport = Viewport(surfaceWidth, surfaceHeight, safeArea);
         uiCamera.rect = viewport;
         uiCamera.ResetAspect();
 
         float viewportAspect = safeArea.width / safeArea.height;
-        int activeRootHeight = Mathf.Max(1, uiRoot.activeHeight);
+        int rootHeight = Mathf.Max(1, uiRoot.activeHeight);
         if (uiCamera.orthographic)
         {
-            uiCamera.orthographicSize = CalculateOrthographicSize(
-                referenceWidth,
-                referenceHeight,
-                activeRootHeight,
+            uiCamera.orthographicSize = OrthoSize(
+                refWidth,
+                refHeight,
+                rootHeight,
                 viewportAspect,
-                referenceOrthographicSize);
+                refSize);
         }
         else
         {
-            float planeDistance = GetPerspectivePlaneDistance();
+            float planeDistance = PlaneDistance();
             uiCamera.fieldOfView = planeDistance > 0.01f
-                ? CalculatePerspectiveFieldOfView(
-                    referenceWidth,
-                    referenceHeight,
+                ? PerspectiveFov(
+                    refWidth,
+                    refHeight,
                     viewportAspect,
                     planeDistance)
-                : CalculateVerticalFieldOfView(
-                    referenceVerticalFieldOfView,
-                    (float)referenceWidth / referenceHeight,
+                : VerticalFov(
+                    refFov,
+                    (float)refWidth / refHeight,
                     viewportAspect);
         }
 
-        lastSurfaceWidth = surfaceWidth;
-        lastSurfaceHeight = surfaceHeight;
-        lastSafeArea = safeArea;
-        lastCameraRect = viewport;
-        lastTargetTexture = uiCamera.targetTexture;
+        lastWidth = surfaceWidth;
+        lastHeight = surfaceHeight;
+        lastSafe = safeArea;
+        lastRect = viewport;
+        lastTexture = uiCamera.targetTexture;
     }
 
-    public static float CalculateVerticalFieldOfView(
-        float referenceFieldOfView,
-        float referenceAspect,
+    public static float VerticalFov(
+        float refFov,
+        float refAspect,
         float viewportAspect)
     {
-        referenceFieldOfView = Mathf.Clamp(referenceFieldOfView, 1f, 179f);
-        referenceAspect = Mathf.Max(0.01f, referenceAspect);
+        refFov = Mathf.Clamp(refFov, 1f, 179f);
+        refAspect = Mathf.Max(0.01f, refAspect);
         viewportAspect = Mathf.Max(0.01f, viewportAspect);
-        if (viewportAspect >= referenceAspect)
-            return referenceFieldOfView;
+        if (viewportAspect >= refAspect)
+            return refFov;
 
-        float referenceHalfHeight = Mathf.Tan(referenceFieldOfView * 0.5f * Mathf.Deg2Rad);
-        float fittedHalfHeight = referenceHalfHeight * referenceAspect / viewportAspect;
-        return Mathf.Atan(fittedHalfHeight) * 2f * Mathf.Rad2Deg;
+        float refHalf = Mathf.Tan(refFov * 0.5f * Mathf.Deg2Rad);
+        float fitHalf = refHalf * refAspect / viewportAspect;
+        return Mathf.Atan(fitHalf) * 2f * Mathf.Rad2Deg;
     }
 
-    public static int CalculateFitHeight(int width, int height, float viewportAspect)
+    public static int FitHeight(int width, int height, float viewportAspect)
     {
         width = Mathf.Max(1, width);
         height = Mathf.Max(1, height);
@@ -167,27 +175,27 @@ public sealed class NGUIAspectSafeLayout : MonoBehaviour
         return Mathf.RoundToInt(Mathf.Max(height, width / viewportAspect));
     }
 
-    public static float CalculatePerspectiveFieldOfView(
+    public static float PerspectiveFov(
         int width,
         int height,
         float viewportAspect,
-        float referencePlaneDistance)
+        float planeDepth)
     {
-        int fittedHeight = CalculateFitHeight(width, height, viewportAspect);
-        float distance = Mathf.Max(0.01f, referencePlaneDistance);
-        float fieldOfView = Mathf.Atan(fittedHeight * 0.5f / distance) * 2f * Mathf.Rad2Deg;
+        int fitHeight = FitHeight(width, height, viewportAspect);
+        float distance = Mathf.Max(0.01f, planeDepth);
+        float fieldOfView = Mathf.Atan(fitHeight * 0.5f / distance) * 2f * Mathf.Rad2Deg;
         return Mathf.Clamp(fieldOfView, 1f, 179f);
     }
 
-    public static float CalculateOrthographicSize(
+    public static float OrthoSize(
         int width,
         int height,
-        int activeRootHeight,
+        int rootHeight,
         float viewportAspect,
         float referenceSize)
     {
-        int fittedHeight = CalculateFitHeight(width, height, viewportAspect);
-        return Mathf.Max(0.01f, referenceSize) * fittedHeight / Mathf.Max(1f, activeRootHeight);
+        int fitHeight = FitHeight(width, height, viewportAspect);
+        return Mathf.Max(0.01f, referenceSize) * fitHeight / Mathf.Max(1f, rootHeight);
     }
 
     public static Rect ClampSafeArea(int width, int height, Rect safeArea)
@@ -212,19 +220,19 @@ public sealed class NGUIAspectSafeLayout : MonoBehaviour
         return Rect.MinMaxRect(xMin, yMin, xMax, yMax);
     }
 
-    public static Rect CalculateViewport(int width, int height, Rect safeArea)
+    public static Rect Viewport(int width, int height, Rect safeArea)
     {
         width = Mathf.Max(1, width);
         height = Mathf.Max(1, height);
-        Rect clampedSafeArea = ClampSafeArea(width, height, safeArea);
+        Rect safeRect = ClampSafeArea(width, height, safeArea);
         return new Rect(
-            clampedSafeArea.x / width,
-            clampedSafeArea.y / height,
-            clampedSafeArea.width / width,
-            clampedSafeArea.height / height);
+            safeRect.x / width,
+            safeRect.y / height,
+            safeRect.width / width,
+            safeRect.height / height);
     }
 
-    private void CacheComponents()
+    private void Cache()
     {
         if (uiRoot == null)
             uiRoot = GetComponent<UIRoot>();
@@ -232,33 +240,33 @@ public sealed class NGUIAspectSafeLayout : MonoBehaviour
             uiCamera = GetComponentInChildren<Camera>(true);
     }
 
-    private void ConfigureRoot()
+    private void SetupRoot()
     {
         if (uiRoot == null)
             return;
 
         uiRoot.scalingStyle = UIRoot.Scaling.Constrained;
-        uiRoot.manualWidth = referenceWidth;
-        uiRoot.manualHeight = referenceHeight;
+        uiRoot.manualWidth = refWidth;
+        uiRoot.manualHeight = refHeight;
         uiRoot.fitWidth = true;
         uiRoot.fitHeight = true;
     }
 
-    private float GetPerspectivePlaneDistance()
+    private float PlaneDistance()
     {
         if (uiCamera == null)
             return 0f;
 
-        Vector3 cameraPosition = transform.InverseTransformPoint(uiCamera.transform.position);
-        Vector3 cameraForward = transform.InverseTransformDirection(uiCamera.transform.forward);
-        if (cameraForward.sqrMagnitude < 0.0001f)
+        Vector3 cameraPos = transform.InverseTransformPoint(uiCamera.transform.position);
+        Vector3 cameraDir = transform.InverseTransformDirection(uiCamera.transform.forward);
+        if (cameraDir.sqrMagnitude < 0.0001f)
             return 0f;
 
-        cameraForward.Normalize();
-        return Vector3.Dot(-cameraPosition, cameraForward);
+        cameraDir.Normalize();
+        return Vector3.Dot(-cameraPos, cameraDir);
     }
 
-    private void GetSurfaceMetrics(out int width, out int height, out Rect safeArea)
+    private void GetSurface(out int width, out int height, out Rect safeArea)
     {
         RenderTexture targetTexture = uiCamera != null ? uiCamera.targetTexture : null;
         if (targetTexture != null)
@@ -271,7 +279,7 @@ public sealed class NGUIAspectSafeLayout : MonoBehaviour
 
         width = Screen.width;
         height = Screen.height;
-        safeArea = respectScreenSafeArea
+        safeArea = useSafeArea
             ? Screen.safeArea
             : new Rect(0f, 0f, width, height);
         safeArea = ClampSafeArea(width, height, safeArea);

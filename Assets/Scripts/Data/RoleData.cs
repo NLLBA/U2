@@ -5,7 +5,8 @@ using UnityEngine;
 
 public class RoleData 
 {
-    public List<RoleInfo> roleDatas = new List<RoleInfo>();
+    [XmlArray("roleDatas")]
+    public List<RoleInfo> roles = new List<RoleInfo>();
 }
 
 public class RoleInfo
@@ -16,10 +17,10 @@ public class RoleInfo
     public int speed;
     [XmlAttribute]
     public int volume;
-    [XmlAttribute]
-    public string resName;
+    [XmlAttribute("resName")]
+    public string asset;
     [XmlAttribute]
     public float scale;
-    [XmlAttribute]
-    public int shieldStyle;
+    [XmlAttribute("shieldStyle")]
+    public int shieldId;
 }

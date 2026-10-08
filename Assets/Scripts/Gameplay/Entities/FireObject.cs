@@ -1,6 +1,8 @@
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
-public enum E_Pos_Type
+public enum FirePos
 {
     TopLeft,
     Top,
@@ -14,21 +16,21 @@ public enum E_Pos_Type
 
 public class FireObject : MonoBehaviour
 {
-    private static float globalIntensityScale = 1f;
+    private static float intensity = 1f;
 
-    public static float GlobalIntensityScale => globalIntensityScale;
+    public static float Intensity => intensity;
 
-    public E_Pos_Type type;
+    public FirePos type;
 
-    private FireInfo fireInfo;
-    private int nowNum;
-    private float nowCD;
-    private float nowDelay;
-    private BulletInfo nowBulletInfo;
-    private float changeAngle;
+    private FireInfo fireData;
+    private int count;
+    private float gap;
+    private float delay;
+    private BulletInfo bulletData;
+    private float angleStep;
     private Vector3 screenPos;
-    private Vector3 initDir;
-    private Vector3 nowDir;
+    private Vector3 baseDir;
+    private Vector3 dir;
 
     void Update()
     {
@@ -37,17 +39,17 @@ public class FireObject : MonoBehaviour
 
         UpdatePos();
 
-        float fireDeltaTime = Time.deltaTime * globalIntensityScale;
-        if (fireDeltaTime <= 0f)
+        float delta = Time.deltaTime * intensity;
+        if (delta <= 0f)
             return;
 
-        ResetFireInfo(fireDeltaTime);
-        UpdateFire(fireDeltaTime);
+        ResetFire(delta);
+        Shoot(delta);
     }
 
-    public static void SetGlobalIntensityScale(float scale)
+    public static void SetIntensity(float scale)
     {
-        globalIntensityScale = Mathf.Clamp01(scale);
+        intensity = Mathf.Clamp01(scale);
     }
 
     private void UpdatePos()
@@ -58,184 +60,184 @@ public class FireObject : MonoBehaviour
         screenPos.z = 293;
         switch (type)
         {
-            case E_Pos_Type.TopLeft:
+            case FirePos.TopLeft:
                 screenPos.x = 0;
                 screenPos.y = Screen.height;
-                initDir = Vector3.right;
+                baseDir = Vector3.right;
                 break;
-            case E_Pos_Type.Top:
+            case FirePos.Top:
                 screenPos.x = Screen.width / 2;
                 screenPos.y = Screen.height;
-                initDir = Vector3.right;
+                baseDir = Vector3.right;
                 break;
-            case E_Pos_Type.TopRight:
+            case FirePos.TopRight:
                 screenPos.x = Screen.width;
                 screenPos.y = Screen.height;
-                initDir = Vector3.left;
+                baseDir = Vector3.left;
                 break;
-            case E_Pos_Type.Left:
+            case FirePos.Left:
                 screenPos.x = 0;
                 screenPos.y = Screen.height / 2;
-                initDir = Vector3.right;
+                baseDir = Vector3.right;
                 break;
-            case E_Pos_Type.Right:
+            case FirePos.Right:
                 screenPos.x = Screen.width;
                 screenPos.y = Screen.height / 2;
-                initDir = Vector3.left;
+                baseDir = Vector3.left;
                 break;
-            case E_Pos_Type.BottomLeft:
+            case FirePos.BottomLeft:
                 screenPos.x = 0;
                 screenPos.y = 0;
-                initDir = Vector3.right;
+                baseDir = Vector3.right;
                 break;
-            case E_Pos_Type.Bottom:
+            case FirePos.Bottom:
                 screenPos.x = Screen.width / 2;
                 screenPos.y = 0;
-                initDir = Vector3.right;
+                baseDir = Vector3.right;
                 break;
-            case E_Pos_Type.BottomRight:
+            case FirePos.BottomRight:
                 screenPos.x = Screen.width;
                 screenPos.y = 0;
-                initDir = Vector3.left;
+                baseDir = Vector3.left;
                 break;
         }
 
         transform.position = Camera.main.ScreenToWorldPoint(screenPos);
     }
 
-    private void ResetFireInfo(float deltaTime)
+    private void ResetFire(float deltaTime)
     {
-        if (nowCD != 0 && nowNum != 0)
+        if (gap != 0 && count != 0)
             return;
 
-        if (fireInfo != null)
+        if (fireData != null)
         {
-            nowDelay -= deltaTime;
-            if (nowDelay > 0)
+            delay -= deltaTime;
+            if (delay > 0)
                 return;
         }
 
-        fireInfo = GameDataMgr.Instance.GetRandomFireInfo();
-        if (fireInfo == null)
+        fireData = GameDataMgr.Instance.RandomFire();
+        if (fireData == null)
             return;
 
-        nowNum = fireInfo.num;
-        nowCD = GameDataMgr.Instance.GetFireCD(fireInfo.cd);
-        nowDelay = GameDataMgr.Instance.GetFireDelay(fireInfo.delay);
+        count = fireData.num;
+        gap = GameDataMgr.Instance.FireGap(fireData.cd);
+        delay = GameDataMgr.Instance.FireDelay(fireData.delay);
 
-        string[] strs = fireInfo.ids.Split(',');
-        int beginID = int.Parse(strs[0]);
-        int endID = int.Parse(strs[1]);
-        int randomBulletID = Random.Range(beginID, endID + 1);
-        nowBulletInfo = GameDataMgr.Instance.GetBulletInfoById(randomBulletID);
+        string[] strs = fireData.ids.Split(',');
+        int minId = int.Parse(strs[0]);
+        int maxId = int.Parse(strs[1]);
+        int bulletId = Random.Range(minId, maxId + 1);
+        bulletData = GameDataMgr.Instance.GetBullet(bulletId);
 
-        if (fireInfo.type == 2)
+        if (fireData.type == 2)
         {
             switch (type)
             {
-                case E_Pos_Type.TopLeft:
-                case E_Pos_Type.TopRight:
-                case E_Pos_Type.BottomLeft:
-                case E_Pos_Type.BottomRight:
-                    changeAngle = 90f / (nowNum + 1);
+                case FirePos.TopLeft:
+                case FirePos.TopRight:
+                case FirePos.BottomLeft:
+                case FirePos.BottomRight:
+                    angleStep = 90f / (count + 1);
                     break;
-                case E_Pos_Type.Top:
-                case E_Pos_Type.Left:
-                case E_Pos_Type.Right:
-                case E_Pos_Type.Bottom:
-                    changeAngle = 180f / (nowNum + 1);
+                case FirePos.Top:
+                case FirePos.Left:
+                case FirePos.Right:
+                case FirePos.Bottom:
+                    angleStep = 180f / (count + 1);
                     break;
             }
         }
     }
 
-    private void UpdateFire(float deltaTime)
+    private void Shoot(float deltaTime)
     {
-        if (nowBulletInfo == null)
+        if (bulletData == null)
             return;
 
-        if (nowCD == 0 && nowNum == 0)
+        if (gap == 0 && count == 0)
             return;
 
-        nowCD -= deltaTime;
-        if (nowCD > 0)
+        gap -= deltaTime;
+        if (gap > 0)
             return;
 
         GameObject bullet;
         BulletObject bulletObj;
-        switch (fireInfo.type)
+        switch (fireData.type)
         {
             case 1:
-                bullet = CreateBullet(out bulletObj);
+                bullet = NewBullet(out bulletObj);
                 if (bullet == null)
                     return;
 
                 bullet.transform.position = transform.position;
                 bullet.transform.rotation = Quaternion.LookRotation(PlayerObject.Instance.transform.position - transform.position);
 
-                --nowNum;
-                nowCD = nowNum == 0 ? 0 : GameDataMgr.Instance.GetFireCD(fireInfo.cd);
+                --count;
+                gap = count == 0 ? 0 : GameDataMgr.Instance.FireGap(fireData.cd);
                 break;
             case 2:
-                if (fireInfo.cd == 0)
+                if (fireData.cd == 0)
                 {
-                    for (int i = 0; i < nowNum; i++)
+                    for (int i = 0; i < count; i++)
                     {
-                        bullet = CreateBullet(out bulletObj);
+                        bullet = NewBullet(out bulletObj);
                         if (bullet == null)
                             continue;
 
-                        nowDir = Quaternion.AngleAxis(changeAngle * i, Vector3.up) * initDir;
-                        bullet.transform.position = GetSpreadSpawnPosition(nowDir, i, nowNum);
-                        bullet.transform.rotation = Quaternion.LookRotation(nowDir);
+                        dir = Quaternion.AngleAxis(angleStep * i, Vector3.up) * baseDir;
+                        bullet.transform.position = SpreadPos(dir, i, count);
+                        bullet.transform.rotation = Quaternion.LookRotation(dir);
                     }
 
-                    nowCD = nowNum = 0;
+                    gap = count = 0;
                 }
                 else
                 {
-                    bullet = CreateBullet(out bulletObj);
+                    bullet = NewBullet(out bulletObj);
                     if (bullet == null)
                         return;
 
-                    int index = fireInfo.num - nowNum;
-                    nowDir = Quaternion.AngleAxis(changeAngle * index, Vector3.up) * initDir;
-                    bullet.transform.position = GetSpreadSpawnPosition(nowDir, index, fireInfo.num);
-                    bullet.transform.rotation = Quaternion.LookRotation(nowDir);
+                    int index = fireData.num - count;
+                    dir = Quaternion.AngleAxis(angleStep * index, Vector3.up) * baseDir;
+                    bullet.transform.position = SpreadPos(dir, index, fireData.num);
+                    bullet.transform.rotation = Quaternion.LookRotation(dir);
 
-                    --nowNum;
-                    nowCD = nowNum == 0 ? 0 : GameDataMgr.Instance.GetFireCD(fireInfo.cd);
+                    --count;
+                    gap = count == 0 ? 0 : GameDataMgr.Instance.FireGap(fireData.cd);
                 }
                 break;
         }
     }
 
-    private Vector3 GetSpreadSpawnPosition(Vector3 dir, int index, int count)
+    private Vector3 SpreadPos(Vector3 dir, int index, int count)
     {
-        Vector3 forwardOffset = dir.normalized * 2.8f;
-        Vector3 sideDir = Vector3.Cross(Vector3.up, dir.normalized);
+        Vector3 front = dir.normalized * 2.8f;
+        Vector3 side = Vector3.Cross(Vector3.up, dir.normalized);
 
-        if (sideDir.sqrMagnitude < 0.001f)
+        if (side.sqrMagnitude < 0.001f)
         {
-            sideDir = Vector3.right;
+            side = Vector3.right;
         }
         else
         {
-            sideDir.Normalize();
+            side.Normalize();
         }
 
-        float centerIndex = (count - 1) * 0.5f;
-        float sideOffset = (index - centerIndex) * 0.55f;
+        float center = (count - 1) * 0.5f;
+        float offset = (index - center) * 0.55f;
 
-        return transform.position + forwardOffset + sideDir * sideOffset;
+        return transform.position + front + side * offset;
     }
 
-    private GameObject CreateBullet(out BulletObject bulletObj)
+    private GameObject NewBullet(out BulletObject bulletObj)
     {
         bulletObj = null;
-        ObjectPoolManager pool = ObjectPoolManager.EnsureInstance();
-        GameObject bullet = pool.SpawnResource(
-            nowBulletInfo.resName,
+        ObjectPoolManager pool = ObjectPoolManager.Ensure();
+        GameObject bullet = pool.SpawnAsset(
+            bulletData.asset,
             transform.position,
             Quaternion.identity);
         if (bullet == null)
@@ -247,7 +249,7 @@ public class FireObject : MonoBehaviour
             bulletObj = bullet.AddComponent<BulletObject>();
         }
 
-        bulletObj.InitInfo(nowBulletInfo);
+        bulletObj.Init(bulletData);
         return bullet;
     }
 }

@@ -1,5 +1,7 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public class ChoosePanel : BasePanel<ChoosePanel>
 {
@@ -12,9 +14,10 @@ public class ChoosePanel : BasePanel<ChoosePanel>
     public List<GameObject> speedObjs;
     public List<GameObject> volumeObjs;
     public Camera uis;
-    public UILabel heroNameLabel;
+    [FormerlySerializedAs("heroNameLabel")]
+    public UILabel labHero;
 
-    private GameObject ariPlaneobj;
+    private GameObject heroObj;
     private float time;
     private bool isSel;
 
@@ -28,22 +31,22 @@ public class ChoosePanel : BasePanel<ChoosePanel>
 
         btnLeft.onClick.Add(new EventDelegate(() =>
         {
-            --GameDataMgr.Instance.nowSelHeroIndex;
-            if (GameDataMgr.Instance.nowSelHeroIndex < 0)
+            --GameDataMgr.Instance.heroIndex;
+            if (GameDataMgr.Instance.heroIndex < 0)
             {
-                GameDataMgr.Instance.nowSelHeroIndex = GameDataMgr.Instance.roleData.roleDatas.Count - 1;
+                GameDataMgr.Instance.heroIndex = GameDataMgr.Instance.roleData.roles.Count - 1;
             }
-            ChangeNowHero();
+            UpdateHero();
         }));
 
         btnRight.onClick.Add(new EventDelegate(() =>
         {
-            ++GameDataMgr.Instance.nowSelHeroIndex;
-            if (GameDataMgr.Instance.nowSelHeroIndex >= GameDataMgr.Instance.roleData.roleDatas.Count)
+            ++GameDataMgr.Instance.heroIndex;
+            if (GameDataMgr.Instance.heroIndex >= GameDataMgr.Instance.roleData.roles.Count)
             {
-                GameDataMgr.Instance.nowSelHeroIndex = 0;
+                GameDataMgr.Instance.heroIndex = 0;
             }
-            ChangeNowHero();
+            UpdateHero();
         }));
 
         btnStart.onClick.Add(new EventDelegate(() =>
@@ -62,26 +65,26 @@ public class ChoosePanel : BasePanel<ChoosePanel>
         Hideme();
     }
 
-    private void ChangeNowHero()
+    private void UpdateHero()
     {
-        RoleInfo info = GameDataMgr.Instance.GetNowSelHeroInfo();
-        if (heroNameLabel != null)
-            heroNameLabel.text = GetHeroDisplayName(info);
-        Destroyobj();
+        RoleInfo info = GameDataMgr.Instance.GetHero();
+        if (labHero != null)
+            labHero.text = HeroName(info);
+        DestroyHero();
 
-        GameObject prefab = Resources.Load<GameObject>(info.resName);
+        GameObject prefab = Resources.Load<GameObject>(info.asset);
         if (prefab == null)
         {
-            Debug.LogError("Hero resource not found: " + info.resName);
+            Debug.LogError("Hero resource not found: " + info.asset);
             return;
         }
 
-        ariPlaneobj = Instantiate(prefab);
-        ariPlaneobj.transform.SetParent(heroPos, false);
-        ariPlaneobj.transform.localPosition = Vector3.zero;
-        ariPlaneobj.transform.localRotation = Quaternion.identity;
-        ariPlaneobj.transform.localScale = Vector3.one * info.scale;
-        ariPlaneobj.layer = LayerMask.NameToLayer("UI");
+        heroObj = Instantiate(prefab);
+        heroObj.transform.SetParent(heroPos, false);
+        heroObj.transform.localPosition = Vector3.zero;
+        heroObj.transform.localRotation = Quaternion.identity;
+        heroObj.transform.localScale = Vector3.one * info.scale;
+        heroObj.layer = LayerMask.NameToLayer("UI");
 
         for (int i = 0; i < 10; i++)
         {
@@ -94,42 +97,42 @@ public class ChoosePanel : BasePanel<ChoosePanel>
         }
     }
 
-    public static string GetHeroDisplayName(RoleInfo info)
+    public static string HeroName(RoleInfo info)
     {
-        if (info == null || string.IsNullOrEmpty(info.resName))
+        if (info == null || string.IsNullOrEmpty(info.asset))
             return "UNKNOWN AIRCRAFT";
 
-        string normalized = info.resName.Replace('\\', '/');
+        string normalized = info.asset.Replace('\\', '/');
         int separator = normalized.LastIndexOf('/');
         return separator >= 0 ? normalized.Substring(separator + 1) : normalized;
     }
 
-    private void Destroyobj()
+    private void DestroyHero()
     {
-        if (ariPlaneobj != null)
+        if (heroObj != null)
         {
-            Destroy(ariPlaneobj.gameObject);
-            ariPlaneobj = null;
+            Destroy(heroObj.gameObject);
+            heroObj = null;
         }
     }
 
     public override void Showme()
     {
         base.Showme();
-        GameDataMgr.Instance.nowSelHeroIndex = 0;
-        ChangeNowHero();
+        GameDataMgr.Instance.heroIndex = 0;
+        UpdateHero();
     }
 
-    public void ShowmeKeepingSelection()
+    public void ShowCurrent()
     {
         base.Showme();
-        ChangeNowHero();
+        UpdateHero();
     }
 
     public override void Hideme()
     {
         base.Hideme();
-        Destroyobj();
+        DestroyHero();
     }
 
     private void Update()

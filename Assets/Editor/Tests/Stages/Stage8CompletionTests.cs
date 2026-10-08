@@ -35,22 +35,22 @@ public class Stage8CompletionTests
     [Test]
     public void CorruptPersistentXmlIsBackedUpAndRecoveredFromFallback()
     {
-        string persistentPath = Path.Combine(temporaryDirectory, "Data.xml");
-        string fallbackPath = Path.Combine(temporaryDirectory, "Default.xml");
-        XmlDataMgr.Instance.SaveDataToPath(new XmlRecoveryTestData { value = 42 }, fallbackPath);
-        File.WriteAllText(persistentPath, "<broken>");
+        string dataPath = Path.Combine(temporaryDirectory, "Data.xml");
+        string defaultPath = Path.Combine(temporaryDirectory, "Default.xml");
+        XmlDataMgr.Instance.SavePath(new XmlRecoveryTestData { value = 42 }, defaultPath);
+        File.WriteAllText(dataPath, "<broken>");
 
         LogAssert.Expect(LogType.Warning, new Regex("XML data was corrupt and has been backed up"));
-        XmlRecoveryTestData result = XmlDataMgr.Instance.LoadDataFromPaths(
-            typeof(XmlRecoveryTestData), persistentPath, fallbackPath) as XmlRecoveryTestData;
+        XmlRecoveryTestData result = XmlDataMgr.Instance.LoadPaths(
+            typeof(XmlRecoveryTestData), dataPath, defaultPath) as XmlRecoveryTestData;
 
         Assert.IsNotNull(result);
         Assert.AreEqual(42, result.value);
-        Assert.IsTrue(File.Exists(persistentPath));
+        Assert.IsTrue(File.Exists(dataPath));
         Assert.AreEqual(1, Directory.GetFiles(temporaryDirectory, "Data.corrupt-*.xml").Length);
 
-        XmlRecoveryTestData persisted = XmlDataMgr.Instance.LoadDataFromPaths(
-            typeof(XmlRecoveryTestData), persistentPath, fallbackPath) as XmlRecoveryTestData;
+        XmlRecoveryTestData persisted = XmlDataMgr.Instance.LoadPaths(
+            typeof(XmlRecoveryTestData), dataPath, defaultPath) as XmlRecoveryTestData;
         Assert.IsNotNull(persisted);
         Assert.AreEqual(42, persisted.value);
     }
@@ -58,17 +58,17 @@ public class Stage8CompletionTests
     [Test]
     public void CorruptPersistentXmlWithoutFallbackRestoresDefaultObject()
     {
-        string persistentPath = Path.Combine(temporaryDirectory, "Data.xml");
+        string dataPath = Path.Combine(temporaryDirectory, "Data.xml");
         string missingFallbackPath = Path.Combine(temporaryDirectory, "Missing.xml");
-        File.WriteAllText(persistentPath, "not xml");
+        File.WriteAllText(dataPath, "not xml");
 
         LogAssert.Expect(LogType.Warning, new Regex("XML data was corrupt and has been backed up"));
-        XmlRecoveryTestData result = XmlDataMgr.Instance.LoadDataFromPaths(
-            typeof(XmlRecoveryTestData), persistentPath, missingFallbackPath) as XmlRecoveryTestData;
+        XmlRecoveryTestData result = XmlDataMgr.Instance.LoadPaths(
+            typeof(XmlRecoveryTestData), dataPath, missingFallbackPath) as XmlRecoveryTestData;
 
         Assert.IsNotNull(result);
         Assert.AreEqual(0, result.value);
-        Assert.IsTrue(File.Exists(persistentPath));
+        Assert.IsTrue(File.Exists(dataPath));
         Assert.AreEqual(1, Directory.GetFiles(temporaryDirectory, "Data.corrupt-*.xml").Length);
     }
 

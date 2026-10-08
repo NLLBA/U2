@@ -37,7 +37,7 @@ public static class Stage9ReportGenerator
             host = new GameObject("Stage9ReportGenerator");
             DifficultyDirector director = host.AddComponent<DifficultyDirector>();
             BossController boss = host.AddComponent<BossController>();
-            boss.bossVisualResource = string.Empty;
+            boss.bossPath = string.Empty;
 
             Stage9BalanceReport report = Stage9BalanceModel.BuildReport(
                 GameDataMgr.Instance,

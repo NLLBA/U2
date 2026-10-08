@@ -12,11 +12,11 @@ public class GameFlowManagerTests
         Time.timeScale = 1f;
         host = new GameObject("GameFlowManagerTests");
         manager = host.AddComponent<GameFlowManager>();
-        manager.firstBossTime = 10f;
-        manager.bossWarningTime = 2f;
-        manager.bossDuration = 3f;
-        manager.normalInterval = 5f;
-        manager.ResetFlow();
+        manager.bossStart = 10f;
+        manager.warnTime = 2f;
+        manager.bossTime = 3f;
+        manager.bossGap = 5f;
+        manager.Reset();
     }
 
     [TearDown]
@@ -29,52 +29,52 @@ public class GameFlowManagerTests
     [Test]
     public void FlowCyclesFromNormalThroughBossAndBack()
     {
-        manager.AdvanceFlow(8f);
+        manager.Advance(8f);
         Assert.AreEqual(GameFlowState.BossWarning, manager.State);
 
-        manager.AdvanceFlow(2f);
+        manager.Advance(2f);
         Assert.AreEqual(GameFlowState.BossSurvival, manager.State);
-        Assert.AreEqual(1, manager.CurrentBossRound);
+        Assert.AreEqual(1, manager.BossRound);
 
-        manager.AdvanceFlow(3f);
+        manager.Advance(3f);
         Assert.AreEqual(GameFlowState.Normal, manager.State);
-        Assert.AreEqual(1, manager.CompletedBossRounds);
-        Assert.AreEqual(18f, manager.NextBossTime, 0.001f);
+        Assert.AreEqual(1, manager.BossRounds);
+        Assert.AreEqual(18f, manager.NextBoss, 0.001f);
 
-        manager.AdvanceFlow(3f);
+        manager.Advance(3f);
         Assert.AreEqual(GameFlowState.BossWarning, manager.State);
     }
 
     [Test]
     public void PausePreservesBossCountdown()
     {
-        manager.AdvanceFlow(11f);
+        manager.Advance(11f);
         Assert.AreEqual(GameFlowState.BossSurvival, manager.State);
-        Assert.AreEqual(1f, manager.StateElapsedTime, 0.001f);
+        Assert.AreEqual(1f, manager.StateTime, 0.001f);
 
-        manager.PauseGame();
-        manager.AdvanceFlow(20f);
+        manager.Pause();
+        manager.Advance(20f);
         Assert.AreEqual(GameFlowState.Paused, manager.State);
-        Assert.AreEqual(11f, manager.SurvivalTime, 0.001f);
+        Assert.AreEqual(11f, manager.RunTime, 0.001f);
 
-        manager.ResumeGame();
+        manager.Resume();
         Assert.AreEqual(GameFlowState.BossSurvival, manager.State);
-        Assert.AreEqual(1f, manager.StateElapsedTime, 0.001f);
+        Assert.AreEqual(1f, manager.StateTime, 0.001f);
 
-        manager.AdvanceFlow(2f);
+        manager.Advance(2f);
         Assert.AreEqual(GameFlowState.Normal, manager.State);
-        Assert.AreEqual(1, manager.CompletedBossRounds);
+        Assert.AreEqual(1, manager.BossRounds);
     }
 
     [Test]
     public void GameOverStopsFlow()
     {
-        manager.AdvanceFlow(4f);
-        manager.EnterGameOver();
-        manager.AdvanceFlow(20f);
+        manager.Advance(4f);
+        manager.GameOver();
+        manager.Advance(20f);
 
         Assert.AreEqual(GameFlowState.GameOver, manager.State);
-        Assert.AreEqual(4f, manager.SurvivalTime, 0.001f);
+        Assert.AreEqual(4f, manager.RunTime, 0.001f);
         Assert.AreEqual(0f, Time.timeScale, 0.001f);
     }
 }

@@ -13,8 +13,8 @@ public class ObjectPoolManagerTests
     {
         host = new GameObject("ObjectPoolManagerTests");
         pool = host.AddComponent<ObjectPoolManager>();
-        pool.maxInactivePerResource = 2500;
-        pool.poolingEnabled = true;
+        pool.poolLimit = 2500;
+        pool.usePool = true;
 
         prefab = new GameObject("BulletPrefab");
         prefab.SetActive(false);
@@ -24,7 +24,7 @@ public class ObjectPoolManagerTests
     [TearDown]
     public void TearDown()
     {
-        BulletObject.ClearAllBullets();
+        BulletObject.ClearAll();
         if (host != null)
         {
             Object.DestroyImmediate(host);
@@ -45,7 +45,7 @@ public class ObjectPoolManagerTests
             new Vector3(3f, 4f, 5f),
             Quaternion.Euler(0f, 45f, 0f));
         BulletObject firstBullet = first.GetComponent<BulletObject>();
-        firstBullet.InitInfo(CreateInfo(), BulletSource.Boss, 2f);
+        firstBullet.Init(CreateInfo(), BulletSource.Boss, 2f);
 
         first.transform.rotation = Quaternion.Euler(20f, 80f, 10f);
         firstBullet.Dead(false);
@@ -61,19 +61,19 @@ public class ObjectPoolManagerTests
             new Vector3(-2f, 0f, 8f),
             spawnRotation);
         BulletObject secondBullet = second.GetComponent<BulletObject>();
-        secondBullet.InitInfo(CreateInfo(), BulletSource.Normal, 1f);
+        secondBullet.Init(CreateInfo(), BulletSource.Normal, 1f);
 
         Assert.AreSame(first, second);
         Assert.IsFalse(secondBullet.IsDead);
         Assert.AreEqual(BulletSource.Normal, secondBullet.Source);
         Assert.Less(Quaternion.Angle(spawnRotation, second.transform.rotation), 0.001f);
 
-        ObjectPoolStatistics stats = pool.GetStatistics();
-        Assert.AreEqual(2, stats.SpawnRequests);
-        Assert.AreEqual(1, stats.InstancesCreated);
-        Assert.AreEqual(1, stats.InstancesReused);
+        PoolStats stats = pool.Stats();
+        Assert.AreEqual(2, stats.SpawnCount);
+        Assert.AreEqual(1, stats.NewCount);
+        Assert.AreEqual(1, stats.ReuseCount);
         Assert.AreEqual(1, stats.ActiveCount);
-        Assert.AreEqual(1, stats.RecycleRequests);
+        Assert.AreEqual(1, stats.ReleaseCount);
     }
 
     [Test]
@@ -85,7 +85,7 @@ public class ObjectPoolManagerTests
             Vector3.zero,
             Quaternion.identity);
         BulletObject normalBullet = normalObject.GetComponent<BulletObject>();
-        normalBullet.InitInfo(CreateInfo(), BulletSource.Normal);
+        normalBullet.Init(CreateInfo(), BulletSource.Normal);
 
         GameObject bossObject = pool.Spawn(
             prefab,
@@ -93,9 +93,9 @@ public class ObjectPoolManagerTests
             Vector3.one,
             Quaternion.identity);
         BulletObject bossBullet = bossObject.GetComponent<BulletObject>();
-        bossBullet.InitInfo(CreateInfo(), BulletSource.Boss);
+        bossBullet.Init(CreateInfo(), BulletSource.Boss);
 
-        Assert.AreEqual(1, BulletObject.ClearBossBullets());
+        Assert.AreEqual(1, BulletObject.ClearBoss());
         Assert.IsTrue(normalObject.activeSelf);
         Assert.IsFalse(bossObject.activeSelf);
 
@@ -105,14 +105,14 @@ public class ObjectPoolManagerTests
     [Test]
     public void DisabledPoolingCreatesAndDiscardsEachInstance()
     {
-        pool.poolingEnabled = false;
+        pool.usePool = false;
 
         GameObject first = pool.Spawn(
             prefab,
             "test:no-pool",
             Vector3.zero,
             Quaternion.identity);
-        first.GetComponent<BulletObject>().InitInfo(CreateInfo());
+        first.GetComponent<BulletObject>().Init(CreateInfo());
         first.GetComponent<BulletObject>().Dead(false);
 
         GameObject second = pool.Spawn(
@@ -120,12 +120,12 @@ public class ObjectPoolManagerTests
             "test:no-pool",
             Vector3.zero,
             Quaternion.identity);
-        second.GetComponent<BulletObject>().InitInfo(CreateInfo());
+        second.GetComponent<BulletObject>().Init(CreateInfo());
 
-        ObjectPoolStatistics stats = pool.GetStatistics();
-        Assert.AreEqual(2, stats.InstancesCreated);
-        Assert.AreEqual(0, stats.InstancesReused);
-        Assert.AreEqual(1, stats.DiscardedCount);
+        PoolStats stats = pool.Stats();
+        Assert.AreEqual(2, stats.NewCount);
+        Assert.AreEqual(0, stats.ReuseCount);
+        Assert.AreEqual(1, stats.DropCount);
 
         second.GetComponent<BulletObject>().Dead(false);
     }
@@ -137,18 +137,18 @@ public class ObjectPoolManagerTests
     {
         List<GameObject> objects = SpawnMany(count, "test:scale");
         ReleaseMany(objects);
-        pool.ResetStatistics();
+        pool.ResetStats();
 
         objects = SpawnMany(count, "test:scale");
-        ObjectPoolStatistics activeStats = pool.GetStatistics();
-        Assert.AreEqual(count, activeStats.SpawnRequests);
-        Assert.AreEqual(0, activeStats.InstancesCreated);
-        Assert.AreEqual(count, activeStats.InstancesReused);
+        PoolStats activeStats = pool.Stats();
+        Assert.AreEqual(count, activeStats.SpawnCount);
+        Assert.AreEqual(0, activeStats.NewCount);
+        Assert.AreEqual(count, activeStats.ReuseCount);
         Assert.AreEqual(count, activeStats.ActiveCount);
 
         ReleaseMany(objects);
-        ObjectPoolStatistics finalStats = pool.GetStatistics();
-        Assert.AreEqual(count, finalStats.RecycleRequests);
+        PoolStats finalStats = pool.Stats();
+        Assert.AreEqual(count, finalStats.ReleaseCount);
         Assert.AreEqual(0, finalStats.ActiveCount);
         Assert.AreEqual(count, finalStats.InactiveCount);
     }
@@ -177,8 +177,8 @@ public class ObjectPoolManagerTests
         return new BulletInfo
         {
             type = 1,
-            forwardSpeed = 60f,
-            lifeTime = 30f,
+            moveRate = 60f,
+            life = 30f,
         };
     }
 }
