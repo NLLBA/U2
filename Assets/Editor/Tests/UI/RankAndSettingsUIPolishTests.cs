@@ -138,8 +138,8 @@ public class RankAndSettingsUIPolishTests
 
         AssertSettingLabel(panel.transform, "labMusic", "背景音乐", -350f, 65f);
         AssertSettingLabel(panel.transform, "labSound", "战斗音效", -350f, -95f);
-        AssertSlider(controller.sliderMusic, -55f, 65f);
-        AssertSlider(controller.sliderSound, -55f, -95f);
+        AssertSlider(controller.sliderMusic, -11f, 65f);
+        AssertSlider(controller.sliderSound, -11f, -95f);
         AssertToggle(controller.toggleMusic, 315f, 65f);
         AssertToggle(controller.toggleSound, 315f, -95f);
         Assert.That(controller.sliderMusic.transform.localPosition.y - controller.sliderSound.transform.localPosition.y,

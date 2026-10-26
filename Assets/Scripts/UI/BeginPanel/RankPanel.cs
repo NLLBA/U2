@@ -18,6 +18,12 @@ public class RankPanel : BasePanel<RankPanel>
     {
         base.Showme();
 
+        foreach (UILabel label in GetComponentsInChildren<UILabel>(true))
+        {
+            if (label.name == "lblTitle")
+                label.text = "无尽模式排行榜";
+        }
+
         if (scrollView == null)
             return;
 
@@ -35,7 +41,8 @@ public class RankPanel : BasePanel<RankPanel>
             GameObject prefab = Resources.Load<GameObject>("UI/RankItem");
             if (prefab == null)
             {
-                Debug.LogError("Rank item prefab not found at Resources/UI/RankItem.");
+                GameLog.Error(GameLogCategory.Data, "RANK_PREFAB_MISSING",
+                    "Rank item prefab not found at Resources/UI/RankItem.");
                 break;
             }
 
@@ -46,7 +53,8 @@ public class RankPanel : BasePanel<RankPanel>
             RankItem item = row.GetComponent<RankItem>();
             if (item == null)
             {
-                Debug.LogError("Rank item prefab has no RankItem component.", row);
+                GameLog.Error(GameLogCategory.Data, "RANK_COMPONENT_MISSING",
+                    "Rank item prefab has no RankItem component: " + row.name);
                 Destroy(row);
                 break;
             }

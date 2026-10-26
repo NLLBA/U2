@@ -2,6 +2,9 @@ using System.Xml.Serialization;
 
 public class MusicData
 {
+    [XmlElement("settingsVersion")]
+    public int settingsVersion;
+
     // 背景音乐音量，范围 0-1。
     [XmlElement("musicvalue")]
     public float musicVolume = 0.5f;

@@ -34,6 +34,11 @@ public class GameOverPanel : BasePanel<GameOverPanel>
 
     public override void Showme()
     {
+        if (NetworkBattleSession.Instance != null && NetworkBattleSession.Instance.IsBattle)
+        {
+            Hideme();
+            return;
+        }
         base.Showme();
         submitted = false;
         endTime = (int)GamePanel.Instance.nowTime;
@@ -49,6 +54,11 @@ public class GameOverPanel : BasePanel<GameOverPanel>
 
     private void Submit(string sceneName)
     {
+        if (NetworkBattleSession.Instance != null && NetworkBattleSession.Instance.IsBattle)
+        {
+            Hideme();
+            return;
+        }
         if (submitted)
             return;
 

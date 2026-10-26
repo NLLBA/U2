@@ -6,19 +6,45 @@ public class Main : MonoBehaviour
 {
     void Start()
     {
-        Time.timeScale = 1;
-        ObjectPoolManager.Ensure(gameObject);
+        GameFlowManager.ResetGlobalTimeScale();
+        NetworkBattleSession.Ensure();
+        NetworkBattleUI.Ensure();
+        ObjectPoolManager pool = ObjectPoolManager.Ensure(gameObject);
         SoundManager.Ensure();
-        GameFlowManager.Ensure(gameObject);
-        DifficultyDirector.Ensure(gameObject);
+        GameFlowManager flow = GameFlowManager.Ensure(gameObject);
+        if (GameDataMgr.Instance.IsTraining)
+        {
+            LevelInfo training = new LevelInfo
+            {
+                id = 1,
+                name = "训练模式",
+                bossStart = 9999f,
+                bossDuration = 30f,
+                bossGap = 9999f,
+            };
+            flow.Configure(training);
+        }
+        else if (GameDataMgr.Instance.IsEndless)
+            flow.ConfigureEndless();
+        else
+            flow.Configure(GameDataMgr.Instance.GetLevel());
+        if (!GameDataMgr.Instance.IsTraining)
+            DifficultyDirector.Ensure(gameObject);
         ScoreManager.Ensure(gameObject);
-        BossController.Ensure(gameObject);
+        if (!GameDataMgr.Instance.IsTraining)
+            BossController.Ensure(gameObject);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        GameDataMgr.Instance.ValidateResourceReferences();
+#endif
 
         RoleInfo info = GameDataMgr.Instance.GetHero();
-        GameObject prefab = Resources.Load<GameObject>(info.asset);
+        pool.PreloadAssets(GameDataMgr.Instance.ResourcesForCurrentRun());
+        if (BossController.Instance != null)
+            pool.PreloadAssets(BossController.Instance.ResourcePaths());
+        GameObject prefab = pool.LoadAsset(info.asset);
         if (prefab == null)
         {
-            Debug.LogError("Player resource not found: " + info.asset);
+            GameLog.Error(GameLogCategory.Data, "PLAYER_RESOURCE_MISSING", info.asset);
             return;
         }
 
@@ -29,12 +55,22 @@ public class Main : MonoBehaviour
             playerObj = obj.AddComponent<PlayerObject>();
         }
 
-        int hp = Mathf.Max(1, info.hp + GameDataMgr.Instance.HpBonus());
+        int hp = GameDataMgr.Instance.PlayerHp(info);
         playerObj.speed = info.speed * 20;
         playerObj.maxHp = hp;
         playerObj.nowHp = hp;
         playerObj.turnSpeed = 20;
 
         GamePanel.Instance.ChangeHP(hp);
+        if (!GameDataMgr.Instance.IsEndless && !GameDataMgr.Instance.IsTraining)
+            LevelEncounterDirector.Ensure(gameObject);
+        if (!GameDataMgr.Instance.IsEndless && !GameDataMgr.Instance.IsTraining && GameDataMgr.Instance.selectedLevelId == 4)
+            SignalRelayController.Ensure(gameObject);
+        if (GameDataMgr.Instance.IsEndless)
+            EndlessRunController.Ensure(gameObject);
+        if (GameDataMgr.Instance.IsTraining)
+            TrainingModeController.Ensure(gameObject);
+        CampaignMissionController.Ensure(gameObject);
+        CampaignMissionUI.Ensure();
     }
 }

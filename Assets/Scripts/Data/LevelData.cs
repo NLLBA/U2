@@ -31,4 +31,28 @@ public class LevelInfo
 
     [XmlAttribute]
     public string fireIds;
+
+    [XmlAttribute]
+    public string objectiveType;
+
+    [XmlAttribute]
+    public int objectiveTarget;
+
+    [XmlAttribute]
+    public string objectiveText;
+
+    [XmlAttribute]
+    public string featureTitle;
+
+    [XmlAttribute]
+    public string featureHint;
+
+    [XmlAttribute]
+    public float bossStart;
+
+    [XmlAttribute]
+    public float bossDuration;
+
+    [XmlAttribute]
+    public float bossGap;
 }

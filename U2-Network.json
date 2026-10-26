@@ -1,0 +1,8 @@
+﻿{
+    "serverUrl":  "wss://supplemental-districts-kurt-brilliant.trycloudflare.com/relay",
+    "environment":  "development",
+    "allowQuickTunnel":  true,
+    "configVersion":  1,
+    "requiredClientVersion":  "1.0.0",
+    "notice":  "Temporary online service. Update this config after the service restarts."
+}

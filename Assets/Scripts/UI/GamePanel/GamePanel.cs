@@ -14,10 +14,21 @@ public class GamePanel : BasePanel<GamePanel>
     [FormerlySerializedAs("labHeroSkillIcon")]
     public UILabel labSkillIcon;
     public UILabel labBossWarning;
+    private UILabel labEncounter;
+    private UILabel labChallenges;
+    private UILabel labCombatFeedback;
 
     public List<GameObject> hpObjs;
 
     public float nowTime = 0;
+
+    private int displayedLevelId;
+    private float levelNoticeUntil;
+    private float feedbackUntil;
+    private Color feedbackColor;
+    private float nextClockRefresh;
+    private float nextDynamicRefresh;
+    private float nextBossTextRefresh;
 
     public override void Init()
     {
@@ -29,14 +40,50 @@ public class GamePanel : BasePanel<GamePanel>
             }));
         }
 
-        if (labDifficulty != null)
+        if (labLevel != null)
+        {
+            labLevel.fontSize = 24;
+            labLevel.height = 64;
+            labLevel.maxLineCount = 2;
+            labLevel.overflowMethod = UILabel.Overflow.ShrinkContent;
+        }
+
+        if (labDifficulty != null && labEncounter == null)
         {
             labDifficulty.overflowMethod = UILabel.Overflow.ShrinkContent;
+            labEncounter = Instantiate(labDifficulty, labDifficulty.transform.parent);
+            labEncounter.name = "labEncounter";
+            labEncounter.transform.localPosition = labDifficulty.transform.localPosition + Vector3.down * 44f;
+            labEncounter.height = 52;
+            labEncounter.fontSize = 17;
+            labEncounter.maxLineCount = 2;
+            labEncounter.text = string.Empty;
+
+            labChallenges = Instantiate(labDifficulty, labDifficulty.transform.parent);
+            labChallenges.name = "labChallengeProgress";
+            labChallenges.transform.localPosition = labDifficulty.transform.localPosition + Vector3.down * 102f;
+            labChallenges.height = 48;
+            labChallenges.fontSize = 16;
+            labChallenges.maxLineCount = 2;
+            labChallenges.overflowMethod = UILabel.Overflow.ShrinkContent;
+            labChallenges.text = string.Empty;
+            labChallenges.gameObject.SetActive(false);
         }
 
         if (labBossWarning != null)
         {
+            labBossWarning.overflowMethod = UILabel.Overflow.ShrinkContent;
             labBossWarning.gameObject.SetActive(false);
+            if (labCombatFeedback == null)
+            {
+                labCombatFeedback = Instantiate(labBossWarning, labBossWarning.transform.parent);
+                labCombatFeedback.name = "labCombatFeedback";
+                labCombatFeedback.transform.localPosition = labBossWarning.transform.localPosition + Vector3.down * 92f;
+                labCombatFeedback.height = 54;
+                labCombatFeedback.fontSize = 24;
+                labCombatFeedback.maxLineCount = 2;
+                labCombatFeedback.gameObject.SetActive(false);
+            }
         }
 
         ChangeHP(5);
@@ -63,9 +110,34 @@ public class GamePanel : BasePanel<GamePanel>
             nowTime += Time.deltaTime;
         }
 
-        UpdateTime();
-        UpdateInfo();
+        float unscaledNow = Time.unscaledTime;
+        CombatTuningData tuning = GameDataMgr.Instance.Tuning;
+        if (unscaledNow >= nextClockRefresh)
+        {
+            nextClockRefresh = unscaledNow + tuning.hudClockRefreshSeconds;
+            UpdateTime();
+        }
+        UpdateLevelNotice();
+        if (unscaledNow >= nextDynamicRefresh)
+        {
+            nextDynamicRefresh = unscaledNow + tuning.hudDynamicRefreshSeconds;
+            UpdateInfo();
+        }
         UpdateBoss();
+        UpdateCombatFeedback();
+    }
+
+    public void ShowCombatFeedback(string text, Color color, float duration = 1.25f)
+    {
+        if (labCombatFeedback == null || string.IsNullOrEmpty(text))
+            return;
+        feedbackColor = color;
+        feedbackColor.a = 1f;
+        feedbackUntil = Time.unscaledTime + Mathf.Max(0.25f, duration);
+        labCombatFeedback.text = text;
+        labCombatFeedback.color = feedbackColor;
+        labCombatFeedback.transform.localScale = Vector3.one * 1.08f;
+        labCombatFeedback.gameObject.SetActive(true);
     }
 
     private void CheckPause()
@@ -88,6 +160,11 @@ public class GamePanel : BasePanel<GamePanel>
 
     private void ShowPause()
     {
+        if (NetworkBattleSession.Instance != null && NetworkBattleSession.Instance.IsPlaying)
+        {
+            return;
+        }
+
         if (QuitPanel.Instance == null)
             return;
 
@@ -105,47 +182,98 @@ public class GamePanel : BasePanel<GamePanel>
 
     private void UpdateTime()
     {
-        labTime.text = "";
+        if (labTime == null)
+            return;
+
+        string value = string.Empty;
 
         if ((int)nowTime / 3600 > 0)
         {
-            labTime.text += (int)nowTime / 3600 + "h";
+            value += (int)nowTime / 3600 + "h";
         }
-        if ((int)nowTime % 3600 / 60 > 0 || labTime.text != "")
+        if ((int)nowTime % 3600 / 60 > 0 || value.Length > 0)
         {
-            labTime.text += (int)nowTime % 3600 / 60 + "m";
+            value += (int)nowTime % 3600 / 60 + "m";
         }
-        labTime.text += (int)nowTime % 60 + "s";
+        value += (int)nowTime % 60 + "s";
+        SetText(labTime, value);
     }
 
     private void UpdateInfo()
     {
         if (labLevel != null)
         {
-            labLevel.text = GameDataMgr.Instance.LevelName();
-            if (GameFlowManager.Instance != null)
+            string levelText = GameDataMgr.Instance.LevelName();
+            CampaignMissionController mission = CampaignMissionController.Instance;
+            if (mission != null && mission.IsActiveCampaign)
+                levelText += "\n" + mission.ObjectiveProgressText();
+
+            string status = string.Empty;
+            if (GameFlowManager.Instance != null &&
+                (GameDataMgr.Instance.IsEndless || GameDataMgr.Instance.GetLevel().bossStart < 9999f))
             {
-                labLevel.text += "  |  " + GameFlowManager.Instance.StatusText();
+                status += GameFlowManager.Instance.StatusText();
                 if (GameFlowManager.Instance.State == GameFlowState.BossSurvival &&
                     BossController.Instance != null && BossController.Instance.BossActive)
                 {
-                    labLevel.text += "  |  弹幕：" + BossController.Instance.PatternName();
+                    status += "  |  " + BossController.Instance.PatternName();
                 }
             }
+            if (status.Length > 0)
+                levelText += (mission != null && mission.IsActiveCampaign ? "  |  " : "\n") + status;
+            SetText(labLevel, levelText);
+        }
+
+        LevelEncounterDirector encounter = LevelEncounterDirector.Instance;
+        CampaignMissionController activeMission = CampaignMissionController.Instance;
+        if (labChallenges != null)
+        {
+            bool showChallenges = activeMission != null && activeMission.IsActiveCampaign &&
+                activeMission.State == CampaignMissionState.Running;
+            if (labChallenges.gameObject.activeSelf != showChallenges)
+                labChallenges.gameObject.SetActive(showChallenges);
+            if (showChallenges)
+                SetText(labChallenges, "挑战  " + activeMission.LiveChallengeText());
+        }
+        if (labEncounter != null && GameDataMgr.Instance.IsEndless)
+        {
+            LevelInfo next = GameDataMgr.Instance.GetNextLevel(nowTime);
+            labEncounter.color = new Color(0.8f, 0.55f, 1f);
+            string wave = EndlessRunController.Instance != null ? EndlessRunController.Instance.StatusText() : "波次计算中";
+            SetText(labEncounter, wave + "\n" + (next != null
+                ? "渐进生存 · 距阶段" + next.id + "还有" + Mathf.CeilToInt(next.beginTime - nowTime) + "秒"
+                : "极限生存 · 组合攻击持续升级"));
+        }
+        else if (labEncounter != null && encounter != null)
+        {
+            LevelInfo level = GameDataMgr.Instance.GetLevel();
+            labEncounter.color = LevelEncounterDirector.Accent(level.id);
+            string affinity = PlayerObject.ActiveStageAffinityText();
+            string encounterText = level.featureTitle + " · 阶段" + encounter.CurrentPhase + "·" +
+                encounter.PhaseName + " · " + encounter.PhaseRuleText +
+                (string.IsNullOrEmpty(affinity) ? string.Empty : " · " + affinity) +
+                "\n" + encounter.StatusText();
+            if (ScoreManager.Instance != null && ScoreManager.Instance.MechanicCombo > 0)
+                encounterText += " · 连击 " + ScoreManager.Instance.MechanicCombo;
+            SetText(labEncounter, encounterText);
         }
 
         if (labDifficulty != null)
         {
-            labDifficulty.text = "难度：" + GameDataMgr.Instance.DifficultyName();
+            string difficultyText = GameDataMgr.Instance.IsTraining ? "训练：无伤害教学" : "难度：" + GameDataMgr.Instance.DifficultyName();
             if (ScoreManager.Instance != null)
             {
-                labDifficulty.text += "  |  威胁：" + ScoreManager.Instance.Threat +
+                difficultyText += "  |  威胁：" + ScoreManager.Instance.Threat +
                     "  |  分数：" + ScoreManager.Instance.TotalScore;
             }
             else if (DifficultyDirector.Instance != null)
             {
-                labDifficulty.text += "  |  威胁等级：" + DifficultyDirector.Instance.ThreatLevel;
+                difficultyText += "  |  威胁等级：" + DifficultyDirector.Instance.ThreatLevel;
             }
+            if (ScoreManager.Instance != null)
+                difficultyText += "  |  倍率 " +
+                    ScoreManager.Instance.ScoreRate.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + "x";
+            SetText(labDifficulty, difficultyText);
         }
 
         if (PlayerObject.Instance == null)
@@ -153,18 +281,29 @@ public class GamePanel : BasePanel<GamePanel>
 
         if (labSkill != null)
         {
-            labSkill.text = PlayerObject.Instance.SkillText();
+            SetText(labSkill, PlayerObject.Instance.SkillText());
         }
 
         if (labShieldIcon != null)
         {
-            labShieldIcon.text = PlayerObject.Instance.ShieldIcon();
+            SetText(labShieldIcon, PlayerObject.Instance.ShieldIcon());
         }
 
         if (labSkillIcon != null)
         {
-            labSkillIcon.text = PlayerObject.Instance.SkillIconText();
+            SetText(labSkillIcon, PlayerObject.Instance.SkillIconText());
         }
+    }
+
+    private void UpdateLevelNotice()
+    {
+        LevelInfo level = GameDataMgr.Instance.GetLevel();
+        if (displayedLevelId == level.id)
+            return;
+
+        displayedLevelId = level.id;
+        // Use run time so a paused game also pauses the transition notice.
+        levelNoticeUntil = nowTime + 4f;
     }
 
     private void UpdateBoss()
@@ -173,10 +312,14 @@ public class GamePanel : BasePanel<GamePanel>
             return;
 
         GameFlowManager flow = GameFlowManager.Instance;
-        bool shouldShow = flow != null &&
+        bool showBoss = flow != null &&
             (flow.State == GameFlowState.BossWarning || flow.State == GameFlowState.BossSurvival);
+        bool showLevel = nowTime < levelNoticeUntil &&
+            (flow == null || (flow.State != GameFlowState.GameOver && flow.State != GameFlowState.Paused));
+        bool shouldShow = showBoss || showLevel;
 
-        if (labBossWarning.gameObject.activeSelf != shouldShow)
+        bool visibilityChanged = labBossWarning.gameObject.activeSelf != shouldShow;
+        if (visibilityChanged)
         {
             labBossWarning.gameObject.SetActive(shouldShow);
         }
@@ -184,10 +327,27 @@ public class GamePanel : BasePanel<GamePanel>
         if (!shouldShow)
             return;
 
-        int seconds = Mathf.CeilToInt(flow.Countdown());
+        bool refreshText = visibilityChanged || Time.unscaledTime >= nextBossTextRefresh;
+        if (refreshText)
+            nextBossTextRefresh = Time.unscaledTime + GameDataMgr.Instance.Tuning.hudClockRefreshSeconds;
+
+        if (!showBoss)
+        {
+            LevelInfo level = GameDataMgr.Instance.GetLevel();
+            if (refreshText)
+                SetText(labBossWarning, GameDataMgr.Instance.IsEndless
+                    ? "无尽模式 · 阶段 " + level.id + "\n弹幕逐步加强，持续生存挑战最高分"
+                    : level.name + " · " + level.featureTitle + "\n" + level.featureHint);
+            labBossWarning.transform.localScale = Vector3.one;
+            labBossWarning.color = LevelEncounterDirector.Accent(level.id);
+            return;
+        }
+
         if (flow.State == GameFlowState.BossWarning)
         {
-            labBossWarning.text = "BOSS 接近  第" + (flow.BossRounds + 1) + "轮  " + seconds + "秒";
+            if (refreshText)
+                SetText(labBossWarning, "BOSS 接近  第" + (flow.BossRounds + 1) + "轮  " +
+                    Mathf.CeilToInt(flow.Countdown()) + "秒");
             float pulse = 1f + Mathf.Sin(Time.unscaledTime * 10f) * 0.08f;
             labBossWarning.transform.localScale = Vector3.one * pulse;
             labBossWarning.color = Color.Lerp(
@@ -197,9 +357,41 @@ public class GamePanel : BasePanel<GamePanel>
         }
         else
         {
-            labBossWarning.text = "第" + flow.BossRound + "轮 BOSS  坚持 " + seconds + "秒";
-            labBossWarning.transform.localScale = Vector3.one;
-            labBossWarning.color = new Color(1f, 0.72f, 0.16f, 1f);
+            if (refreshText)
+                SetText(labBossWarning, !GameDataMgr.Instance.IsEndless && GameDataMgr.Instance.selectedLevelId == 5 &&
+                    BossController.Instance != null
+                    ? "BOSS核心反击  " + BossController.Instance.PhaseStatus()
+                    : "第" + flow.BossRound + "轮 BOSS  坚持 " + Mathf.CeilToInt(flow.Countdown()) + "秒");
+            bool shieldFlash = BossController.Instance != null && BossController.Instance.ShieldBreakFlashActive;
+            float pulse = shieldFlash ? 1.12f + Mathf.Sin(Time.unscaledTime * 28f) * 0.1f : 1f;
+            labBossWarning.transform.localScale = Vector3.one * pulse;
+            labBossWarning.color = shieldFlash
+                ? Color.Lerp(Color.white, new Color(1f, 0.2f, 0.08f, 1f),
+                    (Mathf.Sin(Time.unscaledTime * 24f) + 1f) * 0.5f)
+                : new Color(1f, 0.72f, 0.16f, 1f);
         }
+    }
+
+    private void UpdateCombatFeedback()
+    {
+        if (labCombatFeedback == null || !labCombatFeedback.gameObject.activeSelf)
+            return;
+        float remaining = feedbackUntil - Time.unscaledTime;
+        if (remaining <= 0f)
+        {
+            labCombatFeedback.gameObject.SetActive(false);
+            return;
+        }
+        float fade = Mathf.Clamp01(remaining / 0.3f);
+        Color color = feedbackColor;
+        color.a = fade;
+        labCombatFeedback.color = color;
+        labCombatFeedback.transform.localScale = Vector3.one * Mathf.Lerp(1f, 1.08f, fade);
+    }
+
+    private static void SetText(UILabel label, string value)
+    {
+        if (label != null && label.text != value)
+            label.text = value;
     }
 }

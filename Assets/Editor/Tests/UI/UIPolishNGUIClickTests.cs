@@ -2,6 +2,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using NUnit.Framework;
@@ -147,7 +149,7 @@ public class UIPolishNGUIClickTests
         ChoosePanel controller = panel.GetComponent<ChoosePanel>();
         Assert.IsNotNull(controller);
         Assert.IsNotNull(controller.labHero, "The generated fighter-name label must be serialized on ChoosePanel.");
-        Assert.AreEqual(ChoosePanel.HeroName(GameDataMgr.Instance.GetHero()),
+        StringAssert.StartsWith(ChoosePanel.HeroName(GameDataMgr.Instance.GetHero()),
             controller.labHero.text);
         Assert.AreNotEqual("当前战机", controller.labHero.text);
 
@@ -204,6 +206,24 @@ public class UIPolishNGUIClickTests
         yield return null;
 
         Assert.IsTrue(choosePanel.activeSelf, "The NGUI click should open ChoosePanel.");
+        UILabel heroName = ChoosePanel.Instance.labHero;
+        UILabel heroDetails = FindChildComponent<UILabel>(choosePanel.transform, "HeroDetailLabel");
+        UIWidget heroDetailBackdrop = FindChildComponent<UIWidget>(choosePanel.transform, "HeroDetailBackdrop");
+        UIWidget statsPanel = FindChildComponent<UIWidget>(choosePanel.transform, "Polish_Stats");
+        Assert.IsNotNull(heroDetails, "Role recommendations must use a separate label below the fighter name.");
+        Assert.IsNotNull(heroDetailBackdrop);
+        Assert.IsNotNull(statsPanel);
+        Assert.AreEqual(1, heroName.maxLineCount);
+        Assert.Less(heroDetails.transform.localPosition.y, heroName.transform.localPosition.y - 35f,
+            "Role details must not overlap the fighter name.");
+        Assert.Greater(heroDetails.transform.localPosition.x, 250f,
+            "Role details must stay in the stats column instead of covering the aircraft preview.");
+        Assert.AreEqual(statsPanel.width, heroDetailBackdrop.width,
+            "Role details must not extend beyond the stats column.");
+        Assert.AreEqual(statsPanel.transform.localPosition.x, heroDetailBackdrop.transform.localPosition.x, 0.01f,
+            "Role details must remain centered in the stats column.");
+        Assert.LessOrEqual(Mathf.Abs(ChoosePanel.Instance.heroPos.localPosition.y - 20f), 4.1f,
+            "Aircraft bobbing must remain bounded around its authored preview position.");
         Assert.IsFalse(beginPanel.activeSelf, "The NGUI click should hide BeginPanel.");
 
         UIButton leftButton = FindChildComponent<UIButton>(choosePanel.transform, "btnLeft");
@@ -289,6 +309,44 @@ public class UIPolishNGUIClickTests
         yield return null;
         yield return null;
 
+        GameObject campaignSelect = GameObject.Find("CampaignLevelSelect");
+        Assert.IsNotNull(campaignSelect,
+            "Difficulty confirmation must open the campaign level selector.");
+        Assert.IsTrue(campaignSelect.activeInHierarchy);
+        Assert.IsNotNull(FindChildComponent<UILabel>(campaignSelect.transform, "LevelSelectTitle"));
+        Assert.IsNotNull(FindChildComponent<UILabel>(campaignSelect.transform, "SelectedMissionObjective"));
+        for (int levelId = 1; levelId <= GameDataMgr.MaxLevelId; levelId++)
+        {
+            UIButton levelButton = FindChildComponent<UIButton>(campaignSelect.transform, "LevelButton" + levelId);
+            Assert.IsNotNull(levelButton);
+            Assert.IsTrue(levelButton.isEnabled, "All campaign missions must be available immediately.");
+        }
+        InjectNguiTouchClick(FindChildComponent<UIButton>(campaignSelect.transform, "LevelButton5"));
+        yield return null;
+        campaignSelect = GameObject.Find("CampaignLevelSelect");
+        StringAssert.Contains("风暴BOSS战", FindChildComponent<UILabel>(campaignSelect.transform, "SelectedMissionObjective").text);
+        CaptureNetworkUiIfRequested("FifthMissionSelect.png", campaignSelect.layer);
+        InjectNguiTouchClick(FindChildComponent<UIButton>(campaignSelect.transform, "EndlessModeButton"));
+        yield return null;
+        campaignSelect = GameObject.Find("CampaignLevelSelect");
+        Assert.AreEqual("无尽生存", FindChildComponent<UILabel>(campaignSelect.transform, "SelectedMissionName").text);
+        StringAssert.Contains("排行榜", FindChildComponent<UILabel>(campaignSelect.transform, "SelectedMissionRecord").text);
+        CaptureNetworkUiIfRequested("EndlessModeSelect.png", campaignSelect.layer);
+        InjectNguiTouchClick(FindChildComponent<UIButton>(campaignSelect.transform, "TrainingModeButton"));
+        yield return null;
+        campaignSelect = GameObject.Find("CampaignLevelSelect");
+        Assert.AreEqual("训练模式", FindChildComponent<UILabel>(campaignSelect.transform, "SelectedMissionName").text);
+        StringAssert.Contains("不计分", FindChildComponent<UILabel>(campaignSelect.transform, "SelectedMissionStars").text);
+        InjectNguiTouchClick(FindChildComponent<UIButton>(campaignSelect.transform, "LevelButton1"));
+        yield return null;
+        campaignSelect = GameObject.Find("CampaignLevelSelect");
+        UIButton levelStartButton = FindChildComponent<UIButton>(campaignSelect.transform, "LevelSelectStart");
+        Assert.IsNotNull(levelStartButton);
+        CaptureNetworkUiIfRequested("CampaignLevelSelect.png", campaignSelect.layer);
+        InjectNguiTouchClick(levelStartButton);
+        yield return null;
+        yield return null;
+
         Assert.AreEqual(TestGameScenePath, SceneManager.GetActiveScene().path,
             "Play Mode must load the temporary GameScene copy.");
 
@@ -297,7 +355,400 @@ public class UIPolishNGUIClickTests
             yield return AssertPanelRaycasts(GamePanels, i);
         Assert.AreEqual(6, validatedRaycasts, "Every styled GameScene button must pass the NGUI raycast path.");
 
+        PlayerObject.Instance.Dead();
+        yield return null;
+        yield return null;
+        GameObject missionResult = GameObject.Find("CampaignMissionResult");
+        Assert.IsNotNull(missionResult, "Single-player death must show the campaign settlement.");
+        Assert.IsNotNull(FindChildComponent<UIButton>(missionResult.transform, "MissionRetryButton"));
+        Assert.IsNotNull(FindChildComponent<UIButton>(missionResult.transform, "MissionMenuButton"));
+        CaptureNetworkUiIfRequested("CampaignMissionResult.png", missionResult.layer);
+
         yield return new ExitPlayMode();
+    }
+
+    [UnityTest]
+    public IEnumerator NetworkModeUsesConsoleButtonAndReopensVisibleEditableLobby()
+    {
+        EditorSceneManager.OpenScene(TestBeginScenePath, OpenSceneMode.Single);
+        yield return new EnterPlayMode();
+        SceneManager.LoadScene(TestBeginScenePath);
+        yield return null;
+        yield return null;
+
+        Scene scene = SceneManager.GetActiveScene();
+        BeginPanel menu = FindSceneObject(scene, "BeginPanel").GetComponent<BeginPanel>();
+        UIButton entry = FindChildComponent<UIButton>(menu.transform, "NetworkBattleEntryButton");
+        Assert.IsNotNull(entry, "Network mode must be part of the mission console.");
+        UI2DSprite startVisual = menu.btnBegin.GetComponent<UI2DSprite>();
+        UI2DSprite networkVisual = entry.GetComponent<UI2DSprite>();
+        Assert.AreSame(startVisual.sprite2D, networkVisual.sprite2D);
+        Assert.AreEqual(startVisual.width, networkVisual.width);
+        Assert.AreEqual(startVisual.height, networkVisual.height);
+        Assert.AreEqual(menu.btnBegin.GetComponentInChildren<UILabel>().font,
+            entry.GetComponentInChildren<UILabel>().font);
+        Assert.AreEqual("联网模式", entry.GetComponentInChildren<UILabel>().text);
+        UI2DSprite console = FindChildComponent<UI2DSprite>(menu.transform, "Polish_MenuPanel");
+        foreach (UIButton button in new[] { menu.btnBegin, entry, menu.btnRank, menu.btnSetting, menu.btnQuit })
+        {
+            UI2DSprite visual = button.GetComponent<UI2DSprite>();
+            Assert.LessOrEqual(Mathf.Abs(button.transform.localPosition.x - console.transform.localPosition.x) + visual.width * 0.5f,
+                console.width * 0.5f, button.name + " must fit inside the mission console horizontally.");
+            Assert.LessOrEqual(Mathf.Abs(button.transform.localPosition.y - console.transform.localPosition.y) + visual.height * 0.5f,
+                console.height * 0.5f, button.name + " must fit inside the mission console vertically.");
+        }
+        CaptureNetworkUiIfRequested("NetworkConsole.png", entry.gameObject.layer);
+
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            InjectNguiTouchClick(entry);
+            yield return null;
+            yield return null;
+            GameObject lobby = FindSceneObject(scene, "NetworkBattleLobby");
+            Assert.IsNotNull(lobby);
+            Assert.IsTrue(lobby.activeInHierarchy);
+            Assert.IsFalse(menu.gameObject.activeSelf);
+            Assert.IsFalse(FindSceneObject(scene, "ChoosePanel").activeSelf,
+                "The cloned button must open the lobby without invoking the single-player callback.");
+            RefreshNgui(scene);
+            foreach (UI2DSprite visual in lobby.GetComponentsInChildren<UI2DSprite>())
+            {
+                Assert.IsNotNull(visual.sprite2D, visual.name + " must use a real project image, not a missing atlas.");
+                Assert.IsNotNull(visual.drawCall, visual.name + " must be submitted for rendering.");
+            }
+            UILabel title = FindChildComponent<UILabel>(lobby.transform, "LobbyTitle");
+            Assert.IsTrue(title.isVisible);
+            Assert.IsNotNull(title.drawCall, "Lobby text must be rendered in front of its background.");
+            UI2DSprite panel = FindChildComponent<UI2DSprite>(lobby.transform, "LobbyPanel");
+            Assert.Greater(title.depth, panel.depth);
+
+            UIInput name = FindChildComponent<UIInput>(lobby.transform, "NameInput");
+            UIInput address = FindChildComponent<UIInput>(lobby.transform, "RoomCodeInput");
+            Assert.AreEqual(attempt == 0 ? "Player" : "Pilot42", name.value);
+            Assert.AreEqual(string.Empty, address.value,
+                "Public rooms must require the host's room code.");
+            Assert.IsNull(FindChildComponent<UIInput>(lobby.transform, "PortInput"));
+            Assert.IsNotNull(FindChildComponent<UIButton>(lobby.transform, "LanModeButton"));
+            foreach (UIInput input in lobby.GetComponentsInChildren<UIInput>())
+            {
+                UI2DSprite background = input.GetComponent<UI2DSprite>();
+                foreach (Vector3 corner in input.label.worldCorners)
+                {
+                    Vector3 localCorner = input.transform.InverseTransformPoint(corner);
+                    Assert.LessOrEqual(Mathf.Abs(localCorner.x), background.width * 0.5f,
+                        input.name + " text must remain inside the input horizontally.");
+                    Assert.LessOrEqual(Mathf.Abs(localCorner.y), background.height * 0.5f,
+                        input.name + " text must remain inside the input vertically.");
+                }
+            }
+            if (attempt == 0)
+                CaptureNetworkUiIfRequested("NetworkLobby.png", entry.gameObject.layer);
+
+            InjectNguiTouchClick(name.gameObject);
+            yield return null;
+            yield return null;
+            Assert.IsTrue(name.isSelected, "The lobby name field must receive real NGUI clicks.");
+            name.SendMessage("Insert", "Pilot42", SendMessageOptions.RequireReceiver);
+            Assert.AreEqual("Pilot42", name.value);
+            InjectNguiTouchClick(address.gameObject);
+            yield return null;
+            Assert.IsTrue(address.isSelected);
+            Assert.IsFalse(name.isSelected);
+            InjectNguiTouchClick(name.gameObject);
+            yield return null;
+            Assert.IsTrue(name.isSelected, "Clicking away must not prevent editing the name again.");
+
+            InjectNguiTouchClick(FindChildComponent<UIButton>(lobby.transform, "CloseButton"));
+            yield return null;
+            yield return null;
+            Assert.IsTrue(menu.gameObject.activeInHierarchy, "Returning must restore the mission console.");
+            Assert.IsNull(FindSceneObject(scene, "NetworkBattleLobby"), "A closed lobby must release its overlay and colliders.");
+            Assert.AreEqual(1, menu.GetComponentsInChildren<UIButton>()
+                .Count(button => button.name == "NetworkBattleEntryButton"),
+                "Reopening the lobby must not duplicate the network entry.");
+            Assert.AreEqual(1, menu.GetComponentsInChildren<UIButton>()
+                .Count(button => button.name == "HelpEntryButton"));
+            Assert.AreEqual(0, menu.GetComponentsInChildren<UIButton>()
+                .Count(button => button.name == "TrainingEntryButton"));
+        }
+
+        InjectNguiTouchClick(menu.btnBegin);
+        yield return null;
+        Assert.IsTrue(FindSceneObject(scene, "ChoosePanel").activeSelf,
+            "The original start-game button must still open fighter selection.");
+        yield return new ExitPlayMode();
+    }
+
+    [UnityTest]
+    public IEnumerator NetworkBattleResultDistinguishesVictoryDefeatAndDraw()
+    {
+        EditorSceneManager.OpenScene(TestGameScenePath, OpenSceneMode.Single);
+        yield return new EnterPlayMode();
+        SceneManager.LoadScene(TestGameScenePath);
+        yield return null;
+        yield return null;
+
+        Scene scene = SceneManager.GetActiveScene();
+        NetworkBattleSession session = NetworkBattleSession.Ensure();
+        SetPrivateProperty(session, "LocalPlayerName", "PilotOne");
+        SetPrivateProperty(session, "RemotePlayerName", "PilotTwo");
+        SetPrivateProperty(session, "LocalScore", 860);
+        SetPrivateProperty(session, "RemoteScore", 720);
+        SetPrivateProperty(session, "LocalTime", 214f);
+        SetPrivateProperty(session, "RemoteTime", 188f);
+        SetPrivateProperty(session, "LocalAlive", false);
+        SetPrivateProperty(session, "RemoteAlive", false);
+        Time.timeScale = 0f;
+
+        string[] results = { "你获胜", "对手获胜", "平局" };
+        string[] titles = { "任务胜利", "任务失败", "势均力敌" };
+        string[] localStatuses = { "胜方", "败方", "平局" };
+        string[] remoteStatuses = { "败方", "胜方", "平局" };
+        UIButton finalBackButton = null;
+
+        for (int i = 0; i < results.Length; i++)
+        {
+            SetPrivateProperty(session, "State", NetworkBattleSession.BattleState.Waiting);
+            yield return null;
+            yield return null;
+            SetPrivateProperty(session, "ResultText", results[i]);
+            SetPrivateProperty(session, "State", NetworkBattleSession.BattleState.Finished);
+            yield return null;
+            yield return null;
+
+            GameObject result = FindSceneObject(scene, "NetworkBattleResult");
+            Assert.IsNotNull(result, results[i] + " must open the full-screen result presentation.");
+            Assert.AreEqual(90, result.GetComponent<UIPanel>().depth,
+                "The network result must render above the original game-over UI.");
+            Assert.AreEqual(titles[i], FindChildComponent<UILabel>(result.transform, "ResultTitle").text);
+            Assert.AreEqual(localStatuses[i], FindChildComponent<UILabel>(result.transform, "LocalResultStatus").text);
+            Assert.AreEqual(remoteStatuses[i], FindChildComponent<UILabel>(result.transform, "RemoteResultStatus").text);
+            Assert.AreEqual("PilotOne", FindChildComponent<UILabel>(result.transform, "LocalResultName").text);
+            Assert.AreEqual("860 分", FindChildComponent<UILabel>(result.transform, "LocalResultScore").text);
+            Assert.AreEqual("生存 3m34s", FindChildComponent<UILabel>(result.transform, "LocalResultTime").text);
+            Assert.AreEqual("PilotTwo", FindChildComponent<UILabel>(result.transform, "RemoteResultName").text);
+            Assert.AreEqual("720 分", FindChildComponent<UILabel>(result.transform, "RemoteResultScore").text);
+
+            UI2DSprite scrim = FindChildComponent<UI2DSprite>(result.transform, "ResultScrim");
+            Assert.GreaterOrEqual(scrim.width, 1920);
+            Assert.GreaterOrEqual(scrim.height, 1080);
+            UIButton back = FindChildComponent<UIButton>(result.transform, "ResultBackButton");
+            Assert.IsNotNull(back);
+            Assert.AreEqual("返回任务控制台", back.GetComponentInChildren<UILabel>().text);
+            finalBackButton = back;
+
+            RefreshNgui(scene);
+            foreach (UI2DSprite visual in result.GetComponentsInChildren<UI2DSprite>())
+            {
+                Assert.IsNotNull(visual.sprite2D, visual.name + " must use an authored project image.");
+                Assert.IsNotNull(visual.drawCall, visual.name + " must be submitted for rendering.");
+            }
+
+            if (i < 2)
+                CaptureNetworkUiIfRequested(i == 0 ? "NetworkVictoryResult.png" : "NetworkDefeatResult.png",
+                    back.gameObject.layer);
+        }
+
+        InjectNguiTouchClick(finalBackButton);
+        yield return null;
+        yield return null;
+        Assert.AreEqual("BeginScene", SceneManager.GetActiveScene().name,
+            "The result action must return both players to the mission console scene.");
+
+        yield return new ExitPlayMode();
+    }
+
+    [UnityTest]
+    public IEnumerator NetworkReadyRequiresCharacterConfirmationBeforeBattle()
+    {
+        EditorSceneManager.OpenScene(TestBeginScenePath, OpenSceneMode.Single);
+        yield return new EnterPlayMode();
+        SceneManager.LoadScene(TestBeginScenePath);
+        yield return null;
+        yield return null;
+        NetworkBattleSession session = NetworkBattleSession.Ensure();
+        SetPrivateProperty(session, "IsHost", true);
+        SetPrivateProperty(session, "RemotePlayerName", "PilotTwo");
+        SetPrivateProperty(session, "State", NetworkBattleSession.BattleState.Waiting);
+        session.SetReady();
+        DeliverNetworkMessage(session, "{\"type\":\"ready\",\"ready\":true}");
+        yield return null;
+        yield return null;
+        yield return null;
+
+        Assert.AreEqual(NetworkBattleSession.BattleState.SelectingCharacter, session.State);
+        Assert.AreEqual("BeginScene", SceneManager.GetActiveScene().name);
+        ChoosePanel choose = ChoosePanel.Instance;
+        Assert.IsTrue(choose.gameObject.activeInHierarchy);
+        Assert.IsFalse(BeginPanel.Instance.gameObject.activeSelf);
+        Assert.IsFalse(DifficultyPanel.Instance.gameObject.activeSelf);
+        Assert.IsNull(FindSceneObject(SceneManager.GetActiveScene(), "NetworkBattleLobby"));
+        int previousHero = GameDataMgr.Instance.heroIndex;
+        InjectNguiTouchClick(choose.btnRight);
+        yield return null;
+        Assert.AreNotEqual(previousHero, GameDataMgr.Instance.heroIndex);
+        string selectedHero = ChoosePanel.HeroName(GameDataMgr.Instance.GetHero());
+        InjectNguiTouchClick(choose.btnStart);
+        yield return null;
+        Assert.IsTrue(session.LocalReady);
+        Assert.IsFalse(choose.btnStart.isEnabled);
+        Assert.IsFalse(choose.btnRight.isEnabled);
+        Assert.AreEqual(NetworkBattleSession.BattleState.SelectingCharacter, session.State,
+            "One character confirmation must not start either player's battle.");
+        DeliverNetworkMessage(session, "{\"type\":\"ready\",\"ready\":true}");
+        Assert.AreEqual(NetworkBattleSession.BattleState.SelectingCharacter, session.State,
+            "A late lobby-ready message must not count as character confirmation.");
+        DeliverNetworkMessage(session, "{\"type\":\"ready\",\"phase\":\"character\",\"ready\":true}");
+        yield return null;
+        yield return null;
+        Assert.AreEqual(NetworkBattleSession.BattleState.Playing, session.State);
+        Assert.AreEqual("GameScene", SceneManager.GetActiveScene().name);
+        StringAssert.StartsWith(selectedHero, PlayerObject.Instance.name);
+        session.Leave();
+        yield return new ExitPlayMode();
+    }
+
+    [UnityTest]
+    public IEnumerator NetworkDeathWaitsForFinalResultAndRematchReturnsToCharacterSelection()
+    {
+        EditorSceneManager.OpenScene(TestGameScenePath, OpenSceneMode.Single);
+        yield return new EnterPlayMode();
+        SceneManager.LoadScene(TestGameScenePath);
+        yield return null;
+        yield return null;
+        NetworkBattleSession session = NetworkBattleSession.Ensure();
+        SetPrivateProperty(session, "IsHost", true);
+        SetPrivateProperty(session, "RemotePlayerName", "PilotTwo");
+        SetPrivateProperty(session, "State", NetworkBattleSession.BattleState.Playing);
+        PlayerObject.Instance.Dead();
+        yield return null;
+        yield return null;
+        Assert.IsFalse(session.LocalAlive);
+        Assert.AreEqual(NetworkBattleSession.BattleState.Playing, session.State);
+        Assert.IsFalse(GameOverPanel.Instance.gameObject.activeSelf);
+        GameObject waiting = FindSceneObject(SceneManager.GetActiveScene(), "NetworkBattleWaitingResult");
+        Assert.IsNotNull(waiting);
+        Assert.IsEmpty(waiting.GetComponentsInChildren<UIButton>(), "Waiting must not offer single-player save/restart actions.");
+        CaptureNetworkUiIfRequested("NetworkWaitingForResult.png", waiting.layer);
+
+        // Even an old save/exit callback must not unload the match.
+        EventDelegate.Execute(GameOverPanel.Instance.btnSure.onClick);
+        EventDelegate.Execute(GameOverPanel.Instance.btnRestart.onClick);
+        yield return null;
+        Assert.AreEqual("GameScene", SceneManager.GetActiveScene().name);
+        DeliverNetworkMessage(session, "{\"type\":\"state\",\"score\":550,\"time\":19,\"hp\":2,\"alive\":true}");
+        yield return null;
+        StringAssert.Contains("550", FindChildComponent<UILabel>(waiting.transform, "WaitingRemoteScore").text);
+        Assert.AreEqual(NetworkBattleSession.BattleState.Playing, session.State);
+
+        DeliverNetworkMessage(session, "{\"type\":\"dead\",\"score\":600,\"time\":20,\"hp\":0,\"alive\":false}");
+        yield return null;
+        yield return null;
+        Assert.AreEqual(NetworkBattleSession.BattleState.Finished, session.State);
+        Assert.IsNull(FindSceneObject(SceneManager.GetActiveScene(), "NetworkBattleWaitingResult"));
+        GameObject result = FindSceneObject(SceneManager.GetActiveScene(), "NetworkBattleResult");
+        Assert.IsNotNull(result);
+        Assert.AreEqual("600 分", FindChildComponent<UILabel>(result.transform, "RemoteResultScore").text);
+        Assert.IsFalse(GameOverPanel.Instance.gameObject.activeSelf);
+        DeliverNetworkMessage(session, "{\"type\":\"disconnected\"}");
+        Assert.AreEqual(NetworkBattleSession.BattleState.Finished, session.State);
+
+        typeof(NetworkBattleSession).GetField("workerRunning", BindingFlags.NonPublic | BindingFlags.Instance)
+            .SetValue(session, true);
+        InjectNguiTouchClick(FindChildComponent<UIButton>(result.transform, "ResultRematchButton"));
+        DeliverNetworkMessage(session, "{\"type\":\"rematch\",\"ready\":true}");
+        yield return null;
+        yield return null;
+        yield return null;
+        Assert.AreEqual("BeginScene", SceneManager.GetActiveScene().name);
+        Assert.AreEqual(NetworkBattleSession.BattleState.SelectingCharacter, session.State);
+        Assert.IsTrue(ChoosePanel.Instance.gameObject.activeInHierarchy);
+        Assert.AreEqual(1f, Time.timeScale);
+        DeliverNetworkMessage(session, "{\"type\":\"dead\",\"alive\":false}");
+        DeliverNetworkMessage(session, "{\"type\":\"finish\",\"result\":\"平局\"}");
+        Assert.AreEqual(NetworkBattleSession.BattleState.SelectingCharacter, session.State);
+        session.Leave();
+        yield return new ExitPlayMode();
+    }
+
+    private static void DeliverNetworkMessage(NetworkBattleSession session, string json)
+    {
+        var queue = (System.Collections.Concurrent.ConcurrentQueue<string>)typeof(NetworkBattleSession)
+            .GetField("incoming", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(session);
+        queue.Enqueue(json);
+        typeof(NetworkBattleSession).GetMethod("DrainIncoming", BindingFlags.NonPublic | BindingFlags.Instance)
+            .Invoke(session, null);
+    }
+
+    [UnityTest]
+    public IEnumerator NetworkDisconnectShowsReasonAndReturnsToMenu()
+    {
+        EditorSceneManager.OpenScene(TestGameScenePath, OpenSceneMode.Single);
+        yield return new EnterPlayMode();
+        SceneManager.LoadScene(TestGameScenePath);
+        yield return null;
+        yield return null;
+        NetworkBattleSession session = NetworkBattleSession.Ensure();
+        SetPrivateProperty(session, "LastError", "测试中转服务断开");
+        SetPrivateProperty(session, "State", NetworkBattleSession.BattleState.Error);
+        yield return null;
+        yield return null;
+        GameObject overlay = FindSceneObject(SceneManager.GetActiveScene(), "NetworkBattleResult");
+        Assert.IsNotNull(overlay);
+        StringAssert.Contains("测试中转服务断开", FindChildComponent<UILabel>(overlay.transform, "DisconnectReason").text);
+        Assert.AreEqual(0f, Time.timeScale);
+        InjectNguiTouchClick(FindChildComponent<UIButton>(overlay.transform, "DisconnectMenuButton"));
+        yield return null;
+        yield return null;
+        Assert.AreEqual("BeginScene", SceneManager.GetActiveScene().name);
+        Assert.AreEqual(1f, Time.timeScale);
+        Assert.AreEqual(NetworkBattleSession.BattleState.Idle, session.State);
+        yield return new ExitPlayMode();
+    }
+
+    private void CaptureNetworkUiIfRequested(string filename, int layer)
+    {
+        if (Environment.GetEnvironmentVariable("U2_CAPTURE_NETWORK_UI") != "1")
+            return;
+        FindEventCamera(layer);
+        NGUIAspectSafeLayout layout = UnityEngine.Object.FindObjectOfType<NGUIAspectSafeLayout>();
+        layout.Apply();
+        RefreshNgui(SceneManager.GetActiveScene());
+        Camera[] cameras = Camera.allCameras;
+        Array.Sort(cameras, (left, right) => left.depth.CompareTo(right.depth));
+        foreach (Camera camera in cameras)
+        {
+            RenderTexture previousTarget = camera.targetTexture;
+            float previousAspect = camera.aspect;
+            Matrix4x4 previousProjection = camera.projectionMatrix;
+            try
+            {
+                camera.targetTexture = raycastTarget;
+                camera.aspect = 16f / 9f;
+                camera.Render();
+            }
+            finally
+            {
+                camera.targetTexture = previousTarget;
+                camera.aspect = previousAspect;
+                camera.projectionMatrix = previousProjection;
+            }
+        }
+        RenderTexture previousActive = RenderTexture.active;
+        Texture2D image = new Texture2D(raycastTarget.width, raycastTarget.height, TextureFormat.RGB24, false);
+        try
+        {
+            RenderTexture.active = raycastTarget;
+            image.ReadPixels(new Rect(0, 0, image.width, image.height), 0, 0);
+            image.Apply();
+            Directory.CreateDirectory("Logs/UIReview");
+            File.WriteAllBytes("Logs/UIReview/" + filename, image.EncodeToPNG());
+        }
+        finally
+        {
+            RenderTexture.active = previousActive;
+            UnityEngine.Object.Destroy(image);
+        }
     }
 
     [UnityTearDown]
@@ -538,7 +989,7 @@ public class UIPolishNGUIClickTests
     {
         ChoosePanel controller = choosePanel.GetComponent<ChoosePanel>();
         Assert.IsNotNull(controller.labHero);
-        Assert.AreEqual(ChoosePanel.HeroName(GameDataMgr.Instance.GetHero()),
+        StringAssert.StartsWith(ChoosePanel.HeroName(GameDataMgr.Instance.GetHero()),
             controller.labHero.text, "The fighter name must follow the selected role after a real NGUI click.");
     }
 
@@ -675,6 +1126,12 @@ public class UIPolishNGUIClickTests
     }
 
     private void InjectNguiTouchClick(UIButton button)
+    {
+        Assert.IsNotNull(button);
+        InjectNguiTouchClick(button.gameObject);
+    }
+
+    private void InjectNguiTouchClick(GameObject button)
     {
         Assert.IsNotNull(button);
         BoxCollider collider = button.GetComponent<BoxCollider>();
@@ -1030,6 +1487,14 @@ public class UIPolishNGUIClickTests
                 return objects[i];
         }
         return null;
+    }
+
+    private static void SetPrivateProperty<T>(object target, string propertyName, T value)
+    {
+        PropertyInfo property = target.GetType().GetProperty(propertyName,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        Assert.IsNotNull(property, propertyName + " was not found on " + target.GetType().Name + ".");
+        property.SetValue(target, value, null);
     }
 
     private static T FindChildComponent<T>(Transform root, string name) where T : Component

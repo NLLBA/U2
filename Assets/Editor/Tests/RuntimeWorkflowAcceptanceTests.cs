@@ -16,6 +16,16 @@ public class RuntimeWorkflowAcceptanceTests
     private const string BeginSceneName = "BeginScene";
     private const string GameSceneName = "GameScene";
     private const float DefaultTimeout = 15f;
+    private int previousLevelId;
+    private bool previousEndless;
+
+    [SetUp]
+    public void SetUp()
+    {
+        previousLevelId = GameDataMgr.Instance.selectedLevelId;
+        previousEndless = GameDataMgr.Instance.IsEndless;
+        GameDataMgr.Instance.SetLevel(1);
+    }
 
     [UnityTearDown]
     public IEnumerator TearDown()
@@ -26,6 +36,10 @@ public class RuntimeWorkflowAcceptanceTests
         {
             yield return new ExitPlayMode();
         }
+
+        GameDataMgr.Instance.SetLevel(previousLevelId);
+        if (previousEndless)
+            GameDataMgr.Instance.SelectEndless();
     }
 
     [UnityTest]
@@ -43,6 +57,15 @@ public class RuntimeWorkflowAcceptanceTests
         DifficultyPanel.Instance.Showme();
         DifficultyPanel.Instance.Select(2);
         EventDelegate.Execute(DifficultyPanel.Instance.btnStart.onClick);
+
+        yield return WaitFor(
+            () => GameObject.Find("CampaignLevelSelect") != null &&
+                GameObject.Find("LevelSelectStart") != null,
+            "Difficulty confirmation did not open the campaign level selector.");
+
+        UIButton startMission = GameObject.Find("LevelSelectStart").GetComponent<UIButton>();
+        Assert.IsNotNull(startMission);
+        EventDelegate.Execute(startMission.onClick);
 
         yield return WaitFor(
             () => SceneManager.GetActiveScene().name == GameSceneName &&
@@ -112,8 +135,93 @@ public class RuntimeWorkflowAcceptanceTests
     }
 
     [UnityTest]
+    public IEnumerator EndlessModeContinuesSurvivalAndScoringAcrossBossRounds()
+    {
+        OpenSceneForPlayMode(BeginScenePath);
+        yield return new EnterPlayMode();
+        yield return WaitFor(() => DifficultyPanel.Instance != null && DifficultyPanel.Instance.btnStart.onClick.Count > 0,
+            "Difficulty panel did not initialize.");
+        DifficultyPanel.Instance.Showme();
+        EventDelegate.Execute(DifficultyPanel.Instance.btnStart.onClick);
+        yield return WaitFor(() => GameObject.Find("EndlessModeButton") != null, "Endless option did not appear.");
+        EventDelegate.Execute(GameObject.Find("EndlessModeButton").GetComponent<UIButton>().onClick);
+        yield return null;
+        EventDelegate.Execute(GameObject.Find("LevelSelectStart").GetComponent<UIButton>().onClick);
+        yield return WaitFor(
+            () => IsGameSceneReady() && GameDataMgr.Instance.IsEndless &&
+                CampaignMissionController.Instance != null &&
+                CampaignMissionController.Instance.State == CampaignMissionState.Inactive,
+            "GameScene did not initialize the independent endless mode.");
+
+        // Freeze frame-driven movement while advancing the real game flow explicitly.
+        GameFlowManager flow = GameFlowManager.Instance;
+        flow.Reset();
+        Time.timeScale = 0f;
+        ScoreManager.Instance.Reset();
+        Assert.IsNull(LevelEncounterDirector.Instance, "Endless must use the original progressive emitters.");
+        float initialSpeed = GameDataMgr.Instance.BulletSpeed();
+        flow.Advance(150f);
+        yield return null;
+
+        Assert.AreEqual(5, GameDataMgr.Instance.GetLevel().id);
+        Assert.IsTrue(GameDataMgr.Instance.IsEndless);
+        StringAssert.Contains("无尽模式", GamePanel.Instance.labLevel.text);
+        Assert.IsTrue(GamePanel.Instance.labBossWarning.gameObject.activeSelf);
+        ScoreManager.Instance.UpdateScore();
+        int scoreAtFifthStage = ScoreManager.Instance.TotalScore;
+        Assert.Greater(GameDataMgr.Instance.BulletSpeed(), initialSpeed);
+        Assert.AreEqual(8, DifficultyDirector.Instance.ThreatLevel);
+
+        flow.Advance(60f);
+        yield return null;
+        ScoreManager.Instance.UpdateScore();
+
+        Assert.AreEqual(210f, flow.RunTime, 0.02f);
+        Assert.AreEqual(5, GameDataMgr.Instance.GetLevel().id);
+        Assert.AreEqual(2, flow.BossRounds);
+        Assert.AreEqual(270f, flow.NextBoss, 0.001f);
+        Assert.Greater(ScoreManager.Instance.TotalScore, scoreAtFifthStage);
+        Assert.IsFalse(ScoreManager.Instance.Finished);
+
+        PlayerObject.Instance.Dead();
+        yield return null;
+        Assert.AreEqual(CampaignMissionState.Inactive, CampaignMissionController.Instance.State);
+        Assert.IsNull(GameObject.Find("CampaignMissionResult"));
+        Assert.IsTrue(GameOverPanel.Instance.gameObject.activeSelf);
+        StringAssert.Contains("无尽模式", GameOverPanel.Instance.labTime.text);
+        Assert.IsTrue(ScoreManager.Instance.Finished);
+
+        string rankPath = Path.Combine(Application.persistentDataPath, GameDataMgr.EndlessRankFile + ".xml");
+        byte[] previousFile = File.Exists(rankPath) ? File.ReadAllBytes(rankPath) : null;
+        RankData previousRanks = GameDataMgr.Instance.rankData;
+        int expectedScore = ScoreManager.Instance.TotalScore;
+        try
+        {
+            GameDataMgr.Instance.rankData = new RankData();
+            GameOverPanel.Instance.inputName.value = " Nova ";
+            EventDelegate.Execute(GameOverPanel.Instance.btnSure.onClick);
+            yield return WaitFor(() => SceneManager.GetActiveScene().name == BeginSceneName,
+                "Endless settlement did not return to the menu.");
+            RankData saved = XmlDataMgr.Instance.LoadPaths(typeof(RankData), rankPath, string.Empty) as RankData;
+            Assert.IsNotNull(saved);
+            Assert.AreEqual(1, saved.ranks.Count);
+            Assert.AreEqual("Nova", saved.ranks[0].name);
+            Assert.AreEqual(expectedScore, saved.ranks[0].score);
+            Assert.AreEqual(210, saved.ranks[0].runTime);
+            Assert.AreEqual(2, saved.ranks[0].bosses);
+        }
+        finally
+        {
+            GameDataMgr.Instance.rankData = previousRanks;
+            if (previousFile != null) File.WriteAllBytes(rankPath, previousFile);
+            else if (File.Exists(rankPath)) File.Delete(rankPath);
+        }
+    }
+
+    [UnityTest]
     public IEnumerator PlayerDeathFinalizesScoreAndShowsSettlement()
     {
+        GameDataMgr.Instance.SetLevel(1);
         OpenSceneForPlayMode(GameScenePath);
         yield return new EnterPlayMode();
         yield return WaitFor(
@@ -128,9 +236,12 @@ public class RuntimeWorkflowAcceptanceTests
         Assert.AreEqual(0f, Time.timeScale, 0.001f);
         Assert.IsTrue(ScoreManager.Instance.Finished);
         Assert.Greater(ScoreManager.Instance.TotalScore, 0);
-        Assert.IsNotNull(GameOverPanel.Instance);
-        Assert.IsTrue(GameOverPanel.Instance.gameObject.activeSelf);
-        Assert.IsFalse(string.IsNullOrEmpty(GameOverPanel.Instance.labTime.text));
+        Assert.AreEqual(CampaignMissionState.Failed, CampaignMissionController.Instance.State);
+        Assert.IsNotNull(GameObject.Find("CampaignMissionResult"));
+        Assert.IsNotNull(GameObject.Find("MissionResultAdvice"));
+        Assert.IsFalse(string.IsNullOrEmpty(GameObject.Find("MissionResultAdvice").GetComponent<UILabel>().text));
+        Assert.IsNotNull(GameObject.Find("MissionRetryButton"));
+        Assert.IsNotNull(GameObject.Find("MissionMenuButton"));
     }
 
     [UnityTest]

@@ -40,8 +40,8 @@ public class RankItem : MonoBehaviour
     {
         string date = string.IsNullOrEmpty(info.date) ? "历史记录" : info.date;
         return "分数 " + info.score + "  生存 " + FormatTime(info.runTime) +
-            "  " + info.difficulty +
-            "\nBoss " + info.bosses + "  清除 " + info.clears + "  " + date;
+            "  " + info.difficulty + "  " + info.hero +
+            "\n最高波 " + info.waves + "  Boss " + info.bosses + "  清除 " + info.clears + "  v" + info.version + "  " + date;
     }
 
     private static string FormatTime(int time)

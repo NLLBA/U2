@@ -153,6 +153,28 @@ public class ObjectPoolManagerTests
         Assert.AreEqual(count, finalStats.InactiveCount);
     }
 
+    [Test]
+    public void RepeatedCombatCyclesReachAStableAllocationPlateau()
+    {
+        const int objectsPerCycle = 200;
+        List<GameObject> objects = SpawnMany(objectsPerCycle, "test:soak");
+        ReleaseMany(objects);
+        pool.ResetStats();
+
+        for (int cycle = 0; cycle < 50; cycle++)
+        {
+            objects = SpawnMany(objectsPerCycle, "test:soak");
+            ReleaseMany(objects);
+        }
+
+        PoolStats stats = pool.Stats();
+        Assert.AreEqual(objectsPerCycle * 50, stats.SpawnCount);
+        Assert.AreEqual(0, stats.NewCount, "A warmed combat pool must not allocate in later cycles.");
+        Assert.AreEqual(stats.SpawnCount, stats.ReuseCount);
+        Assert.AreEqual(0, stats.ActiveCount);
+        Assert.AreEqual(objectsPerCycle, stats.InactiveCount);
+    }
+
     private List<GameObject> SpawnMany(int count, string key)
     {
         List<GameObject> objects = new List<GameObject>(count);

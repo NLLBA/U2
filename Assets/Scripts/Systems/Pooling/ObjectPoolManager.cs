@@ -27,6 +27,17 @@ public sealed class PooledObject : MonoBehaviour
     internal string PoolKey;
     internal bool IsSpawned;
     internal Vector3 BaseScale;
+    private IPoolable[] callbacks;
+
+    private void Awake()
+    {
+        RefreshCallbacks();
+    }
+
+    public void RefreshCallbacks()
+    {
+        callbacks = GetComponents<IPoolable>();
+    }
 
     public void ReleaseIn(float delay)
     {
@@ -43,7 +54,8 @@ public sealed class PooledObject : MonoBehaviour
     internal void OnGet()
     {
         CancelInvoke(nameof(ReleaseSelf));
-        IPoolable[] callbacks = GetComponents<IPoolable>();
+        if (callbacks == null)
+            RefreshCallbacks();
         for (int i = 0; i < callbacks.Length; i++)
         {
             callbacks[i].OnAcquire();
@@ -53,7 +65,8 @@ public sealed class PooledObject : MonoBehaviour
     internal void OnPut()
     {
         CancelInvoke(nameof(ReleaseSelf));
-        IPoolable[] callbacks = GetComponents<IPoolable>();
+        if (callbacks == null)
+            RefreshCallbacks();
         for (int i = 0; i < callbacks.Length; i++)
         {
             callbacks[i].OnRelease();
@@ -186,7 +199,7 @@ public class ObjectPoolManager : MonoBehaviour
 
         if (logStats)
         {
-            Debug.Log(StatsText());
+            GameLog.Debug(GameLogCategory.Performance, StatsText());
         }
 
         instance = null;
@@ -200,9 +213,25 @@ public class ObjectPoolManager : MonoBehaviour
     {
         if (string.IsNullOrEmpty(assetPath))
         {
-            Debug.LogError("Cannot spawn an empty resource path.");
+            GameLog.Error(GameLogCategory.Data, "POOL_EMPTY_PATH", "Cannot spawn an empty resource path.");
             return null;
         }
+
+        GameObject prefab = LoadAsset(assetPath);
+
+        if (prefab == null)
+        {
+            GameLog.Error(GameLogCategory.Data, "POOL_RESOURCE_MISSING", "Pooled resource not found: " + assetPath);
+            return null;
+        }
+
+        return Spawn(prefab, "resource:" + assetPath, position, rotation, parent);
+    }
+
+    public GameObject LoadAsset(string assetPath)
+    {
+        if (string.IsNullOrEmpty(assetPath))
+            return null;
 
         GameObject prefab;
         if (!cache.TryGetValue(assetPath, out prefab) || prefab == null)
@@ -210,14 +239,20 @@ public class ObjectPoolManager : MonoBehaviour
             prefab = Resources.Load<GameObject>(assetPath);
             cache[assetPath] = prefab;
         }
+        return prefab;
+    }
 
-        if (prefab == null)
+    public int PreloadAssets(IEnumerable<string> assetPaths)
+    {
+        if (assetPaths == null)
+            return 0;
+        int loaded = 0;
+        foreach (string path in assetPaths)
         {
-            Debug.LogError("Pooled resource not found: " + assetPath);
-            return null;
+            if (LoadAsset(path) != null)
+                loaded++;
         }
-
-        return Spawn(prefab, "resource:" + assetPath, position, rotation, parent);
+        return loaded;
     }
 
     public GameObject Spawn(
@@ -282,6 +317,9 @@ public class ObjectPoolManager : MonoBehaviour
         if (pooledEffect == null)
         {
             pooledEffect = effect.AddComponent<PooledEffect>();
+            PooledObject pooledObject = effect.GetComponent<PooledObject>();
+            if (pooledObject != null)
+                pooledObject.RefreshCallbacks();
         }
 
         pooledEffect.Play(Mathf.Max(0f, lifetime));

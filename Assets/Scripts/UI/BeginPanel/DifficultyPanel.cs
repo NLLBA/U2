@@ -88,8 +88,7 @@ public class DifficultyPanel : BasePanel<DifficultyPanel>
         }
 
         GameDataMgr.Instance.SetDifficulty(DifficultyId);
-        Time.timeScale = 1;
-        SceneManager.LoadScene("GameScene");
+        CampaignLevelSelectUI.Ensure().Open();
     }
 
     public override void Showme()
@@ -114,12 +113,17 @@ public class DifficultyPanel : BasePanel<DifficultyPanel>
 
         if (labSelected != null)
         {
-            labSelected.text = "当前选择：" + selected.name;
+            string attackStyle = selected.id == 1 ? "单一招式 · 高亮预警" :
+                (selected.id == 3 ? "假预警 · 反向横扫 · 双核心" : "中后段叠加组合攻击");
+            labSelected.text = "当前选择：" + selected.name + " · " + attackStyle;
         }
 
         if (labDetail != null)
         {
             labDetail.text = DetailText(selected);
+            labDetail.maxLineCount = 3;
+            labDetail.height = 88;
+            labDetail.overflowMethod = UILabel.Overflow.ShrinkContent;
         }
 
         SetButton(btnEasy, easyColor, selected.id == 1);
@@ -181,13 +185,21 @@ public class DifficultyPanel : BasePanel<DifficultyPanel>
         string hpText = info.hpBonus > 0
             ? "+" + info.hpBonus.ToString(CultureInfo.InvariantCulture)
             : info.hpBonus.ToString(CultureInfo.InvariantCulture);
+        if (info.id == 3)
+            hpText += "（最低2）";
         string bulletSpeed = Mathf.RoundToInt(info.bulletRate * 100f).ToString(CultureInfo.InvariantCulture);
         string shieldTime = info.shieldTime.ToString("0.#", CultureInfo.InvariantCulture);
         string skillCd = info.skillCd.ToString("0.#", CultureInfo.InvariantCulture);
+        int density = GameDataMgr.Instance.EncounterDensityPercent();
+        int warning = GameDataMgr.Instance.EncounterWarningPercent();
+        string scoreRate = ScoreManager.DefaultRateFor(info.id).ToString("0.00", CultureInfo.InvariantCulture);
 
         return "生命修正 " + hpText +
             "  |  敌弹速度 " + bulletSpeed + "%" +
+            "  |  弹幕密度 " + density + "%" +
+            "\n预警时间 " + warning + "%" +
             "  |  护盾 " + shieldTime + " 秒" +
-            "  |  技能冷却 " + skillCd + " 秒";
+            "  |  技能冷却 " + skillCd + " 秒" +
+            "  |  分数倍率 " + scoreRate + "x";
     }
 }

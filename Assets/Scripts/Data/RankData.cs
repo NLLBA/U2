@@ -5,11 +5,18 @@ using System.Xml.Serialization;
 
 public class RankData
 {
+    public const int CurrentSchemaVersion = 2;
+
+    [XmlAttribute("schemaVersion")]
+    public int schemaVersion = CurrentSchemaVersion;
+
     [XmlArray("rankInfos")]
     public List<RankInfo> ranks = new List<RankInfo>();
 
     public void Sort(int maxCount = 20)
     {
+        if (schemaVersion < CurrentSchemaVersion)
+            schemaVersion = CurrentSchemaVersion;
         if (ranks == null)
         {
             ranks = new List<RankInfo>();
@@ -48,6 +55,10 @@ public class RankData
         if (scoreCompare != 0)
             return scoreCompare;
 
+        int waveCompare = right.waves.CompareTo(left.waves);
+        if (waveCompare != 0)
+            return waveCompare;
+
         return right.runTime.CompareTo(left.runTime);
     }
 }
@@ -70,8 +81,20 @@ public class RankInfo
     [XmlAttribute]
     public string difficulty;
 
+    [XmlAttribute]
+    public string mode;
+
+    [XmlAttribute]
+    public string hero;
+
+    [XmlAttribute("gameVersion")]
+    public string version;
+
     [XmlAttribute("bossRounds")]
     public int bosses;
+
+    [XmlAttribute("highestWave")]
+    public int waves;
 
     [XmlAttribute("clearedBullets")]
     public int clears;
@@ -89,7 +112,11 @@ public class RankInfo
         runTime = System.Math.Max(0, runTime);
         time = runTime;
         difficulty = string.IsNullOrWhiteSpace(difficulty) ? "普通" : difficulty;
+        mode = string.IsNullOrWhiteSpace(mode) ? "无尽" : mode;
+        hero = string.IsNullOrWhiteSpace(hero) ? "角色" : hero;
+        version = string.IsNullOrWhiteSpace(version) ? "历史版本" : version;
         bosses = System.Math.Max(0, bosses);
+        waves = System.Math.Max(0, waves);
         clears = System.Math.Max(0, clears);
         date = date ?? string.Empty;
     }

@@ -31,9 +31,19 @@ public class FireObject : MonoBehaviour
     private Vector3 screenPos;
     private Vector3 baseDir;
     private Vector3 dir;
+    private Camera sceneCamera;
+
+    private void Awake()
+    {
+        sceneCamera = Camera.main;
+    }
 
     void Update()
     {
+        // Authored mission waves replace the legacy random emitters.
+        if (LevelEncounterDirector.Instance != null && LevelEncounterDirector.Instance.isActiveAndEnabled)
+            return;
+
         if (PlayerObject.Instance != null && PlayerObject.Instance.isDead)
             return;
 
@@ -54,7 +64,9 @@ public class FireObject : MonoBehaviour
 
     private void UpdatePos()
     {
-        if (Camera.main == null)
+        if (sceneCamera == null)
+            sceneCamera = Camera.main;
+        if (sceneCamera == null)
             return;
 
         screenPos.z = 293;
@@ -102,7 +114,7 @@ public class FireObject : MonoBehaviour
                 break;
         }
 
-        transform.position = Camera.main.ScreenToWorldPoint(screenPos);
+        transform.position = sceneCamera.ScreenToWorldPoint(screenPos);
     }
 
     private void ResetFire(float deltaTime)
@@ -125,11 +137,7 @@ public class FireObject : MonoBehaviour
         gap = GameDataMgr.Instance.FireGap(fireData.cd);
         delay = GameDataMgr.Instance.FireDelay(fireData.delay);
 
-        string[] strs = fireData.ids.Split(',');
-        int minId = int.Parse(strs[0]);
-        int maxId = int.Parse(strs[1]);
-        int bulletId = Random.Range(minId, maxId + 1);
-        bulletData = GameDataMgr.Instance.GetBullet(bulletId);
+        bulletData = GameDataMgr.Instance.RandomBullet(fireData);
 
         if (fireData.type == 2)
         {
@@ -247,6 +255,9 @@ public class FireObject : MonoBehaviour
         if (bulletObj == null)
         {
             bulletObj = bullet.AddComponent<BulletObject>();
+            PooledObject pooled = bullet.GetComponent<PooledObject>();
+            if (pooled != null)
+                pooled.RefreshCallbacks();
         }
 
         bulletObj.Init(bulletData);

@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -13,9 +14,81 @@ public class PlayerObject : MonoBehaviour
     };
     private static readonly string[] SkillIcons = { "爆", "修", "扰", "脉", "速" };
     private static readonly float[] SkillCdBonus = { 2f, 3f, 1f, 4f, 0f };
+    private static readonly int[] AffinityLevels = { 2, 4, 3, 5, 1 };
 
     public static PlayerObject Instance => instance;
     public static float BulletRate => bulletRate;
+    public const float HitProtectionDuration = 0.7f;
+    public int HitsTaken { get; private set; }
+    public bool ShieldActive => isShield;
+    public event Action Damaged;
+    public event Action ShieldActivated;
+    public event Action SkillActivated;
+
+    public static bool HasStageAffinity(int levelId)
+    {
+        if (GameDataMgr.Instance.IsEndless || GameDataMgr.Instance.selectedLevelId != levelId)
+            return false;
+        NetworkBattleSession battle = NetworkBattleSession.Instance;
+        if (battle != null && battle.IsBattle)
+            return false;
+        return AffinityLevelForHero(GameDataMgr.Instance.heroIndex) == levelId;
+    }
+
+    public static int AffinityLevelForHero(int heroIndex)
+    {
+        int index = Mathf.Clamp(heroIndex, 0, AffinityLevels.Length - 1);
+        return AffinityLevels[index];
+    }
+
+    public static string StageAffinityText(int heroIndex)
+    {
+        switch (Mathf.Clamp(heroIndex, 0, 4))
+        {
+            case 0: return "第二关协同：弹簇连锁范围 +25%";
+            case 1: return "第四关协同：取能/传输 +25%，受击损失减半";
+            case 2: return "第三关协同：追踪锁定时间 -20%";
+            case 3: return "第五关协同：反弹核心点击范围 +30%";
+            default: return "第一关协同：基础航速 +12%";
+        }
+    }
+
+    public static string ActiveStageAffinityText()
+    {
+        if (!HasStageAffinity(GameDataMgr.Instance.selectedLevelId))
+            return string.Empty;
+        switch (GameDataMgr.Instance.heroIndex)
+        {
+            case 0: return "爆破协同";
+            case 1: return "维修协同";
+            case 2: return "干扰协同";
+            case 3: return "脉冲协同";
+            default: return "疾航协同";
+        }
+    }
+
+    public static string RecommendedLevelText(int heroIndex)
+    {
+        return "推荐关卡：第" + AffinityLevelForHero(heroIndex) + "关";
+    }
+
+    public static string OperationDifficultyText(int heroIndex)
+    {
+        switch (Mathf.Clamp(heroIndex, 0, 4))
+        {
+            case 1: return "操作难度：简单";
+            case 4: return "操作难度：简单";
+            case 0: return "操作难度：普通";
+            case 2: return "操作难度：普通";
+            default: return "操作难度：进阶";
+        }
+    }
+
+    public static float HeroSkillCooldown(int heroIndex, float baseCooldown)
+    {
+        int index = Mathf.Clamp(heroIndex, 0, SkillCdBonus.Length - 1);
+        return Mathf.Max(0f, baseCooldown) + SkillCdBonus[index];
+    }
 
     public int nowHp;
     public int maxHp;
@@ -32,12 +105,17 @@ public class PlayerObject : MonoBehaviour
     private float pulseEnd;
     private float nextPulse;
     private float boostEnd;
+    private float damageReady;
     private PlayerShieldView shieldView;
+    private Camera sceneCamera;
 
     private void Awake()
     {
         instance = this;
         bulletRate = 1f;
+        damageReady = 0f;
+        HitsTaken = 0;
+        sceneCamera = Camera.main;
         GetShield();
     }
 
@@ -56,7 +134,16 @@ public class PlayerObject : MonoBehaviour
             return;
 
         isDead = true;
+        if (GameDataMgr.Instance.IsEndless && EndlessRunController.Instance != null)
+            EndlessRunController.Instance.RegisterFailure("弹幕命中导致生命耗尽");
         HideShield();
+
+        CampaignMissionController mission = CampaignMissionController.Instance;
+        if (mission != null && mission.IsActiveCampaign)
+        {
+            mission.FailMission();
+            return;
+        }
 
         if (GameFlowManager.Instance != null)
         {
@@ -67,18 +154,30 @@ public class PlayerObject : MonoBehaviour
             Time.timeScale = 0f;
         }
 
+        NetworkBattleSession battle = NetworkBattleSession.Instance;
+        if (battle != null && battle.IsPlaying)
+        {
+            battle.ReportLocalDeath();
+            return;
+        }
+
         GameOverPanel.Instance.Showme();
         ScorePanelPresenter.ShowFinalScore(GameOverPanel.Instance);
     }
 
     public void Wound()
     {
-        if (isDead || isShield)
+        if (isDead || isShield || Time.time < damageReady)
             return;
 
+        damageReady = Time.time + HitProtectionDuration;
+        HitsTaken++;
+        if (ScoreManager.Instance != null)
+            ScoreManager.Instance.RegisterPlayerHit();
         nowHp--;
         SoundManager.Play(SoundCue.PlayerHit);
         GamePanel.Instance.ChangeHP(nowHp);
+        Damaged?.Invoke();
 
         if (nowHp <= 0)
             Dead();
@@ -111,16 +210,20 @@ public class PlayerObject : MonoBehaviour
             turnSpeed * Time.deltaTime);
 
         float moveRate = Time.time < boostEnd ? speed * 1.55f : speed;
+        if (HasStageAffinity(1))
+            moveRate *= 1.12f;
         Vector3 lastPos = transform.position;
         transform.Translate(Vector3.forward * vertical * moveRate * Time.deltaTime);
         transform.Translate(
             Vector3.right * horizontal * moveRate * Time.deltaTime,
             Space.World);
 
-        if (Camera.main == null)
+        if (sceneCamera == null)
+            sceneCamera = Camera.main;
+        if (sceneCamera == null)
             return;
 
-        Vector3 screenPos = Camera.main.WorldToScreenPoint(transform.position);
+        Vector3 screenPos = sceneCamera.WorldToScreenPoint(transform.position);
         if (screenPos.x <= 0f || screenPos.x >= Screen.width)
         {
             transform.position = new Vector3(
@@ -140,39 +243,51 @@ public class PlayerObject : MonoBehaviour
 
     private void CheckClick()
     {
-        if (!Input.GetMouseButtonDown(0) || Camera.main == null)
+        if (!Input.GetMouseButtonDown(0))
             return;
 
-        Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+        if (sceneCamera == null)
+            sceneCamera = Camera.main;
+        if (sceneCamera == null)
+            return;
+
+        Ray ray = sceneCamera.ScreenPointToRay(Input.mousePosition);
         int bulletLayer = LayerMask.NameToLayer("Bullent");
         RaycastHit hitInfo;
-        if (!Physics.Raycast(ray, out hitInfo, 1000f, 1 << bulletLayer))
-            return;
-
-        BulletObject bullet = hitInfo.transform.GetComponent<BulletObject>();
-        if (bullet != null)
+        if (Physics.Raycast(ray, out hitInfo, 1000f, 1 << bulletLayer))
         {
-            bullet.PlayerClear();
+            BulletObject bullet = hitInfo.transform.GetComponentInParent<BulletObject>();
+            if (bullet != null)
+            {
+                bullet.PlayerClear();
+                return;
+            }
         }
+
+        // Mission cores get a forgiving screen-space click area without enlarging
+        // their physical collision volume against the player.
+        BulletObject.TryPlayerClearNearScreen(sceneCamera, Input.mousePosition);
     }
 
     private void UpdateSkills()
     {
         float skillCd = GameDataMgr.Instance.SkillCd();
-        if (Input.GetKeyDown(KeyCode.E) && Time.time >= shieldReady)
+        if ((Input.GetKeyDown(KeyCode.E) || Input.GetKeyDown(KeyCode.JoystickButton0)) && Time.time >= shieldReady)
         {
             isShield = true;
             shieldEnd = Time.time + GameDataMgr.Instance.ShieldTime();
             shieldReady = Time.time + skillCd;
             ShowShield();
             SoundManager.Play(SoundCue.Skill);
+            ShieldActivated?.Invoke();
         }
 
-        if (Input.GetKeyDown(KeyCode.Q) && Time.time >= skillReady)
+        if ((Input.GetKeyDown(KeyCode.Q) || Input.GetKeyDown(KeyCode.JoystickButton1)) && Time.time >= skillReady)
         {
             UseHeroSkill();
             skillReady = Time.time + SkillCooldown();
             SoundManager.Play(SoundCue.Skill);
+            SkillActivated?.Invoke();
         }
     }
 
@@ -181,7 +296,7 @@ public class PlayerObject : MonoBehaviour
         switch (SkillType())
         {
             case 1:
-                BulletObject.ClearAll();
+                BulletObject.ClearByPlayer();
                 break;
             case 2:
                 nowHp = Mathf.Min(maxHp, nowHp + 2);
@@ -210,7 +325,7 @@ public class PlayerObject : MonoBehaviour
 
         if (Time.time < pulseEnd && Time.time >= nextPulse)
         {
-            BulletObject.ClearAll();
+            BulletObject.ClearByPlayer();
             nextPulse = Time.time + 0.75f;
         }
     }
@@ -231,8 +346,12 @@ public class PlayerObject : MonoBehaviour
 
     private float SkillCooldown()
     {
-        int index = SkillType() - 1;
-        return GameDataMgr.Instance.SkillCd() + SkillCdBonus[index];
+        return HeroSkillCooldown(GameDataMgr.Instance.heroIndex, GameDataMgr.Instance.SkillCd());
+    }
+
+    public void GrantProtection(float duration)
+    {
+        damageReady = Mathf.Max(damageReady, Time.time + Mathf.Max(0f, duration));
     }
 
     public string SkillName()

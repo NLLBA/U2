@@ -12,7 +12,7 @@ public class DifficultySelectButton : MonoBehaviour
     {
         GameDataMgr.Instance.SetDifficulty(difficultyId);
         RefreshStatus();
-        Debug.Log("选择难度：" + difficultyName);
+        GameLog.Debug(GameLogCategory.General, "选择难度：" + difficultyName);
     }
 
     private void Start()

@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <LevelData>
   <levelInfos>
-    <LevelInfo id="1" name="第一关-训练航线" beginTime="0" bulletSpeedMul="1" fireCdMul="1" fireDelayMul="1" fireIds="1,2"/>
-    <LevelInfo id="2" name="第二关-密集弹幕" beginTime="30" bulletSpeedMul="1.15" fireCdMul="0.85" fireDelayMul="0.9" fireIds="1,2,3"/>
-    <LevelInfo id="3" name="第三关-追踪压制" beginTime="60" bulletSpeedMul="1.35" fireCdMul="0.7" fireDelayMul="0.75" fireIds="2,3,4"/>
-    <LevelInfo id="4" name="第四关-极限挑战" beginTime="100" bulletSpeedMul="1.6" fireCdMul="0.55" fireDelayMul="0.6" fireIds="1,2,3,4"/>
+    <LevelInfo id="1" name="第一关-边境巡航" beginTime="0" bulletSpeedMul="1" fireCdMul="1" fireDelayMul="1" fireIds="1,2" objectiveType="survive" objectiveTarget="45" objectiveText="穿过移动缺口，生存45秒" featureTitle="移动航道" featureHint="跟随移动缺口穿行；中后段会叠加左右横扫弹幕" bossStart="9999" bossDuration="30" bossGap="9999"/>
+    <LevelInfo id="2" name="第二关-弹幕清扫" beginTime="30" bulletSpeedMul="1.15" fireCdMul="0.85" fireDelayMul="0.9" fireIds="1,2,3" objectiveType="clear" objectiveTarget="8" objectiveText="引爆弹簇，完成8波连锁清扫" featureTitle="核心识别" featureHint="只点击青色核心可连锁清扫；误点外圈弹体会分裂" bossStart="9999" bossDuration="30" bossGap="9999"/>
+    <LevelInfo id="3" name="第三关-追踪压制" beginTime="60" bulletSpeedMul="1.35" fireCdMul="0.7" fireDelayMul="0.75" fireIds="2,3,4" objectiveType="dodge" objectiveTarget="5" objectiveText="成功诱导并躲开5轮锁定齐射" featureTitle="诱导突围" featureHint="锁定后换位并避开侧翼齐射；无伤脱离才计入进度" bossStart="9999" bossDuration="30" bossGap="9999"/>
+    <LevelInfo id="4" name="第四关-信标接力" beginTime="100" bulletSpeedMul="1.6" fireCdMul="0.55" fireDelayMul="0.6" fireIds="1,2,3,4" objectiveType="beacon" objectiveTarget="3" objectiveText="携带能量并激活3座信标" featureTitle="能量接力" featureHint="在中央蓝环取能，再送往橙色信标；受击会损失能量" bossStart="9999" bossDuration="30" bossGap="9999"/>
+    <LevelInfo id="5" name="第五关-星环风暴" beginTime="150" bulletSpeedMul="1.7" fireCdMul="0.48" fireDelayMul="0.52" fireIds="2,3,4" objectiveType="reflect" objectiveTarget="6" objectiveText="反弹金色核心，击破护盾并压制BOSS" featureTitle="核心反击" featureHint="点击金色核心反弹攻击；破盾后BOSS会进入交叉追踪狂暴阶段" bossStart="45" bossDuration="30" bossGap="35"/>
   </levelInfos>
 </LevelData>

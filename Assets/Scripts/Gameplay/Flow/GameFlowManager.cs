@@ -11,6 +11,7 @@ public enum GameFlowState
     BossSurvival,
     Paused,
     GameOver,
+    MissionComplete,
 }
 
 public class GameFlowManager : MonoBehaviour
@@ -20,12 +21,13 @@ public class GameFlowManager : MonoBehaviour
     public static GameFlowManager Instance => instance;
 
     [FormerlySerializedAs("firstBossTime")]
-    [Min(1f)] public float bossStart = 120f;
+    [Min(1f)] public float bossStart = 90f;
     [FormerlySerializedAs("bossWarningTime")]
     [Min(0f)] public float warnTime = 3f;
     [FormerlySerializedAs("bossDuration")]
     [Min(1f)] public float bossTime = 30f;
     [FormerlySerializedAs("normalInterval")]
+    [Tooltip("两次BOSS开始之间的间隔，包含BOSS战和预警时间。")]
     [Min(1f)] public float bossGap = 90f;
 
     public GameFlowState State { get; private set; }
@@ -77,10 +79,11 @@ public class GameFlowManager : MonoBehaviour
 
     public void Reset()
     {
+        ResetGlobalTimeScale();
         bossStart = Mathf.Max(1f, bossStart);
         warnTime = Mathf.Clamp(warnTime, 0f, bossStart);
         bossTime = Mathf.Max(1f, bossTime);
-        bossGap = Mathf.Max(warnTime + 1f, bossGap);
+        bossGap = Mathf.Max(bossTime + warnTime + 1f, bossGap);
 
         RunTime = 0f;
         StateTime = 0f;
@@ -92,9 +95,36 @@ public class GameFlowManager : MonoBehaviour
         SetState(GameFlowState.Normal);
     }
 
+    public static void ResetGlobalTimeScale()
+    {
+        Time.timeScale = 1f;
+    }
+
+    public void Configure(LevelInfo level)
+    {
+        if (level == null)
+            return;
+
+        bossStart = level.bossStart > 0f ? level.bossStart : 90f;
+        bossTime = level.bossDuration > 0f ? level.bossDuration : 30f;
+        bossGap = level.bossGap > 0f ? level.bossGap : 90f;
+        Reset();
+    }
+
+    public void ConfigureEndless()
+    {
+        CombatTuningData tuning = GameDataMgr.Instance.Tuning;
+        bossStart = tuning.endlessBossStart;
+        warnTime = tuning.endlessBossWarning;
+        bossTime = tuning.endlessBossDuration;
+        bossGap = tuning.endlessBossGap;
+        Reset();
+    }
+
     public void Advance(float deltaTime)
     {
-        if (State == GameFlowState.Paused || State == GameFlowState.GameOver)
+        if (State == GameFlowState.Paused || State == GameFlowState.GameOver ||
+            State == GameFlowState.MissionComplete)
             return;
 
         float remaining = Mathf.Max(0f, deltaTime);
@@ -146,6 +176,15 @@ public class GameFlowManager : MonoBehaviour
         SetState(GameFlowState.GameOver);
     }
 
+    public void CompleteMission()
+    {
+        if (State == GameFlowState.GameOver || State == GameFlowState.MissionComplete)
+            return;
+
+        Time.timeScale = 0f;
+        SetState(GameFlowState.MissionComplete);
+    }
+
     public float Countdown()
     {
         switch (State)
@@ -175,6 +214,8 @@ public class GameFlowManager : MonoBehaviour
                 return "游戏已暂停";
             case GameFlowState.GameOver:
                 return "游戏结束";
+            case GameFlowState.MissionComplete:
+                return "任务完成";
             default:
                 return string.Empty;
         }
@@ -208,7 +249,9 @@ public class GameFlowManager : MonoBehaviour
                 break;
             case GameFlowState.BossSurvival:
                 BossRounds = BossRound;
-                NextBoss = RunTime + bossGap;
+                // NextBoss is an absolute time on the run timeline. Advancing it by
+                // the gap keeps boss appearances exactly bossGap seconds apart.
+                NextBoss += bossGap;
                 SetState(GameFlowState.Normal);
                 break;
         }
@@ -240,6 +283,9 @@ public class GameFlowManager : MonoBehaviour
                 break;
             case GameFlowState.GameOver:
                 SoundManager.Play(SoundCue.GameOver);
+                break;
+            case GameFlowState.MissionComplete:
+                SoundManager.Play(SoundCue.BossCleared);
                 break;
         }
     }

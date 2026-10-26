@@ -7,12 +7,15 @@ public class BossControllerTests
     private GameObject host;
     private GameFlowManager flow;
     private BossController controller;
+    private int originalDifficulty;
 
     [SetUp]
     public void SetUp()
     {
         Time.timeScale = 1f;
         FireObject.SetIntensity(1f);
+        originalDifficulty = GameDataMgr.Instance.difficultyIndex;
+        GameDataMgr.Instance.SetDifficulty(2);
 
         host = new GameObject("BossControllerTests");
         flow = host.AddComponent<GameFlowManager>();
@@ -26,7 +29,7 @@ public class BossControllerTests
         flow.bossStart = 10f;
         flow.warnTime = 2f;
         flow.bossTime = 4f;
-        flow.bossGap = 5f;
+        flow.bossGap = 8f;
         flow.Reset();
     }
 
@@ -35,6 +38,7 @@ public class BossControllerTests
     {
         Time.timeScale = 1f;
         FireObject.SetIntensity(1f);
+        GameDataMgr.Instance.SetDifficulty(originalDifficulty);
         if (host != null)
         {
             Object.DestroyImmediate(host);
@@ -95,6 +99,35 @@ public class BossControllerTests
         Assert.Greater(
             controller.VolleySize(BossAttackPattern.Homing, 3),
             controller.VolleySize(BossAttackPattern.Homing, 1));
+    }
+
+    [Test]
+    public void FifthLevelUsesTwoDistinctFinalBossStages()
+    {
+        Assert.AreEqual(BossAttackPattern.Ring, controller.CampaignPatternAt(0f, 1, 5));
+        Assert.AreEqual(BossAttackPattern.Spiral, controller.CampaignPatternAt(0.5f, 1, 5));
+        Assert.AreEqual(BossAttackPattern.Cross, controller.CampaignPatternAt(0f, 2, 5));
+        Assert.AreEqual(BossAttackPattern.Homing, controller.CampaignPatternAt(0.5f, 2, 5));
+        Assert.AreEqual(BossAttackPattern.Fan, controller.CampaignPatternAt(0f, 1, 4));
+    }
+
+    [Test]
+    public void BossVolleySizeAlsoFollowsSelectedDifficulty()
+    {
+        GameDataMgr.Instance.SetDifficulty(1);
+        int easyFan = controller.VolleySize(BossAttackPattern.Fan, 1);
+        int easyHoming = controller.VolleySize(BossAttackPattern.Homing, 1);
+        GameDataMgr.Instance.SetDifficulty(2);
+        int normalFan = controller.VolleySize(BossAttackPattern.Fan, 1);
+        int normalHoming = controller.VolleySize(BossAttackPattern.Homing, 1);
+        GameDataMgr.Instance.SetDifficulty(3);
+        int hardFan = controller.VolleySize(BossAttackPattern.Fan, 1);
+        int hardHoming = controller.VolleySize(BossAttackPattern.Homing, 1);
+
+        Assert.Less(easyFan, normalFan);
+        Assert.Less(normalFan, hardFan);
+        Assert.Less(easyHoming, normalHoming);
+        Assert.Less(normalHoming, hardHoming);
     }
 
     [Test]

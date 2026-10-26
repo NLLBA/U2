@@ -6,8 +6,10 @@ using UnityEngine;
 public class XmlDataMgr
 {
     private static XmlDataMgr instance = new XmlDataMgr();
+    private static string recoveryNotice;
 
     public static XmlDataMgr Instance => instance;
+    public static string RecoveryNotice => recoveryNotice;
 
     private XmlDataMgr() { }
 
@@ -40,12 +42,7 @@ public class XmlDataMgr
             serializer.Serialize(writer, data);
         }
 
-        if (File.Exists(path))
-        {
-            File.Delete(path);
-        }
-
-        File.Move(tempPath, path);
+        ReplaceAtomically(tempPath, path);
     }
 
     /// <summary>
@@ -76,8 +73,10 @@ public class XmlDataMgr
             }
 
             string badPath = BackupFile(dataPath);
-            Debug.LogWarning("XML data was corrupt and has been backed up to " + badPath + ". " +
-                readError.Message);
+            recoveryNotice = "检测到损坏的存档，已恢复默认数据。原文件已备份为 " +
+                Path.GetFileName(badPath) + "。";
+            GameLog.Warning(GameLogCategory.Data, "SAVE_CORRUPT",
+                "XML data was corrupt and has been backed up to " + badPath + ". " + readError.Message);
 
             object restored = LoadDefault(type, defaultPath);
             SaveCopy(restored, dataPath);
@@ -98,8 +97,8 @@ public class XmlDataMgr
                 return defaultData;
             }
 
-            Debug.LogError("Default XML data could not be loaded: " + defaultPath + ". " +
-                defaultError.Message);
+            GameLog.Error(GameLogCategory.Data, "DEFAULT_LOAD",
+                "Default XML data could not be loaded: " + defaultPath + ". " + defaultError.Message);
         }
 
         return Activator.CreateInstance(type);
@@ -154,7 +153,67 @@ public class XmlDataMgr
         }
         catch (Exception ex)
         {
-            Debug.LogError("Recovered XML data could not be saved: " + dataPath + ". " + ex.Message);
+            GameLog.Error(GameLogCategory.Data, "RECOVERY_SAVE",
+                "Recovered XML data could not be saved: " + dataPath + ". " + ex.Message);
+        }
+    }
+
+    public static string ConsumeRecoveryNotice()
+    {
+        string notice = recoveryNotice;
+        recoveryNotice = null;
+        return notice;
+    }
+
+    private void ReplaceAtomically(string tempPath, string path)
+    {
+        string backupPath = path + ".bak";
+        try
+        {
+            if (File.Exists(path))
+            {
+                // File.Replace keeps the old save recoverable if the process is
+                // interrupted while replacing the new file.
+                if (File.Exists(backupPath))
+                    File.Delete(backupPath);
+                File.Replace(tempPath, path, backupPath, true);
+                return;
+            }
+
+            File.Move(tempPath, path);
+        }
+        catch (PlatformNotSupportedException)
+        {
+            ReplaceWithRollback(tempPath, path, backupPath);
+        }
+        catch (IOException)
+        {
+            ReplaceWithRollback(tempPath, path, backupPath);
+        }
+    }
+
+    private void ReplaceWithRollback(string tempPath, string path, string backupPath)
+    {
+        bool movedOld = false;
+        try
+        {
+            if (File.Exists(path))
+            {
+                if (File.Exists(backupPath))
+                    File.Delete(backupPath);
+                File.Move(path, backupPath);
+                movedOld = true;
+            }
+
+            File.Move(tempPath, path);
+        }
+        catch
+        {
+            if (!File.Exists(path) && movedOld && File.Exists(backupPath))
+                File.Move(backupPath, path);
+            if (File.Exists(tempPath))
+                File.Delete(tempPath);
+            throw;
         }
     }
 }

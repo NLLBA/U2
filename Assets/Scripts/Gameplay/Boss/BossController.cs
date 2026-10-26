@@ -9,6 +9,7 @@ public enum BossAttackPattern
     Spiral,
     Cross,
     Homing,
+    Ring,
 }
 
 public class BossController : MonoBehaviour
@@ -37,12 +38,35 @@ public class BossController : MonoBehaviour
     public int BossRound { get; private set; }
     public BossAttackPattern Pattern { get; private set; }
     public int BulletCount { get; private set; }
+    public int ReflectedHits { get; private set; }
+    public int ShieldHitsRequired
+    {
+        get
+        {
+            CombatTuningData tuning = GameDataMgr.Instance.Tuning;
+            return GameDataMgr.Instance.EncounterCount(
+                tuning.bossShieldEasy, tuning.bossShieldNormal, tuning.bossShieldHard);
+        }
+    }
+    public bool ShieldBroken => ReflectedHits >= ShieldHitsRequired;
+    public bool ShieldBreakFlashActive => Time.unscaledTime < shieldBreakFlashUntil;
+    public bool RageVisualActive { get; private set; }
 
     private GameFlowManager flow;
     private GameObject boss;
     private float fireTimer;
     private float spin;
     private int volley;
+    private Material reflectionMaterial;
+    private float shieldBreakShakeUntil;
+    private float shieldBreakFlashUntil;
+    private Renderer[] bossRenderers = new Renderer[0];
+    private Light[] bossLights = new Light[0];
+    private Color[] bossLightColors = new Color[0];
+    private float[] bossLightIntensities = new float[0];
+    private MaterialPropertyBlock bossVisualBlock;
+    private GameObject reflectedBeam;
+    private LineRenderer reflectedBeamLine;
 
     public static BossController Ensure(GameObject host = null)
     {
@@ -63,6 +87,7 @@ public class BossController : MonoBehaviour
         }
 
         instance = this;
+        ApplyTuning();
         ClampValues();
         BindFlow();
 
@@ -84,6 +109,10 @@ public class BossController : MonoBehaviour
 
         StopBoss();
         FireObject.SetIntensity(1f);
+        if (reflectionMaterial != null)
+            DestroyNow(reflectionMaterial);
+        if (reflectedBeam != null)
+            DestroyNow(reflectedBeam);
 
         instance = null;
     }
@@ -108,7 +137,7 @@ public class BossController : MonoBehaviour
         float progress = flow.bossTime <= 0f
             ? 0f
             : flow.StateTime / flow.bossTime;
-        BossAttackPattern next = PatternAt(progress);
+        BossAttackPattern next = ActivePatternAt(progress);
         if (next != Pattern)
         {
             Pattern = next;
@@ -126,26 +155,48 @@ public class BossController : MonoBehaviour
     public BossAttackPattern PatternAt(float progress)
     {
         float time = Mathf.Clamp01(progress);
-        if (time < 0.25f)
+        CombatTuningData tuning = GameDataMgr.Instance.Tuning;
+        if (time < tuning.bossPhase2)
             return BossAttackPattern.Fan;
-        if (time < 0.5f)
+        if (time < tuning.bossPhase3)
             return BossAttackPattern.Spiral;
-        if (time < 0.75f)
+        if (time < tuning.bossPhase4)
             return BossAttackPattern.Cross;
         return BossAttackPattern.Homing;
+    }
+
+    public BossAttackPattern CampaignPatternAt(float progress, int round, int levelId)
+    {
+        if (levelId != 5)
+            return PatternAt(progress);
+
+        float time = Mathf.Clamp01(progress);
+        float split = GameDataMgr.Instance.Tuning.fifthBossPhaseSplit;
+        if (round <= 1)
+            return time < split ? BossAttackPattern.Ring : BossAttackPattern.Spiral;
+        return time < split ? BossAttackPattern.Cross : BossAttackPattern.Homing;
     }
 
     public int VolleySize(BossAttackPattern pattern, int round)
     {
         int level = Mathf.Max(1, round);
+        int difficulty = GameDataMgr.Instance.GetDifficulty().id - 1;
+        CombatTuningData tuning = GameDataMgr.Instance.Tuning;
         if (pattern == BossAttackPattern.Fan)
-            return Mathf.Min(3 + level * 2, 13);
+            return Mathf.Min(tuning.bossFanBase + level * tuning.bossFanPerRound +
+                difficulty * tuning.bossFanPerDifficulty, tuning.bossFanMax);
         if (pattern == BossAttackPattern.Spiral)
-            return Mathf.Min(4 + level, 10);
+            return Mathf.Min(tuning.bossSpiralBase + level * tuning.bossSpiralPerRound +
+                difficulty * tuning.bossSpiralPerDifficulty, tuning.bossSpiralMax);
         if (pattern == BossAttackPattern.Cross)
-            return level >= 2 ? 8 : 4;
+            return (level >= 2 ? tuning.bossCrossAdvanced : tuning.bossCrossBase) +
+                difficulty * tuning.bossCrossPerDifficulty;
         if (pattern == BossAttackPattern.Homing)
-            return Mathf.Min(2 + level, 6);
+            return Mathf.Min(tuning.bossHomingBase + level * tuning.bossHomingPerRound +
+                difficulty * tuning.bossHomingPerDifficulty, tuning.bossHomingMax);
+        if (pattern == BossAttackPattern.Ring)
+            return Mathf.Min(tuning.bossRingBase + level * tuning.bossRingPerRound +
+                difficulty * tuning.bossRingPerDifficulty, tuning.bossRingMax);
         return 1;
     }
 
@@ -167,6 +218,17 @@ public class BossController : MonoBehaviour
         return bossPath;
     }
 
+    public IEnumerable<string> ResourcePaths()
+    {
+        if (!string.IsNullOrWhiteSpace(bossPath))
+            yield return bossPath;
+        if (bossPaths == null)
+            yield break;
+        for (int i = 0; i < bossPaths.Length; i++)
+            if (!string.IsNullOrWhiteSpace(bossPaths[i]))
+                yield return bossPaths[i];
+    }
+
     public string PatternName()
     {
         switch (Pattern)
@@ -179,8 +241,49 @@ public class BossController : MonoBehaviour
                 return "交叉";
             case BossAttackPattern.Homing:
                 return "追踪";
+            case BossAttackPattern.Ring:
+                return "星环";
             default:
                 return string.Empty;
+        }
+    }
+
+    public string PhaseStatus()
+    {
+        int target = GameDataMgr.Instance.MissionTarget(GameDataMgr.Instance.GetLevel());
+        if (!ShieldBroken)
+            return "护盾 " + Mathf.Min(ReflectedHits, ShieldHitsRequired) + "/" + ShieldHitsRequired + " · 点击金色核心反弹";
+        return "狂暴阶段 " + Mathf.Min(ReflectedHits, target) + "/" + target + " · " + PatternName();
+    }
+
+    public void RegisterReflectedHit(Vector3 origin)
+    {
+        if (!BossActive || GameDataMgr.Instance.IsEndless || GameDataMgr.Instance.selectedLevelId != 5)
+            return;
+        bool wasBroken = ShieldBroken;
+        ReflectedHits++;
+        if (ScoreManager.Instance != null)
+            ScoreManager.Instance.RegisterReflectedCore();
+        SoundManager.Play(SoundCue.Skill);
+        DrawReflection(origin);
+        if (!wasBroken && ShieldBroken)
+        {
+            if (PlayerObject.Instance != null)
+                PlayerObject.Instance.GrantProtection(GameDataMgr.Instance.Tuning.fifthBossProtectionSeconds);
+            shieldBreakShakeUntil = Time.unscaledTime + 1.1f;
+            shieldBreakFlashUntil = Time.unscaledTime + 1.4f;
+            if (BKMusic.Instance != null)
+                BKMusic.Instance.SetCombatIntensity(true);
+            ApplyBossRageVisual(true);
+            if (GamePanel.Instance != null)
+                GamePanel.Instance.ShowCombatFeedback("护盾击破 · 1.5秒保护 · BOSS进入狂暴", new Color(1f, 0.35f, 0.12f), 2f);
+            SoundManager.Play(SoundCue.BossAppear);
+        }
+        else if (GamePanel.Instance != null)
+        {
+            GamePanel.Instance.ShowCombatFeedback("核心反弹 +" +
+                (ScoreManager.Instance != null ? ScoreManager.Instance.reflectedCorePoints : 200),
+                new Color(1f, 0.78f, 0.15f));
         }
     }
 
@@ -189,6 +292,14 @@ public class BossController : MonoBehaviour
         bossFireScale = Mathf.Clamp01(bossFireScale);
         fireGap = Mathf.Max(0.1f, fireGap);
         bossScale = Mathf.Max(1f, bossScale);
+    }
+
+    private void ApplyTuning()
+    {
+        CombatTuningData tuning = GameDataMgr.Instance.Tuning;
+        bossFireScale = tuning.bossNormalFireScale;
+        fireGap = tuning.bossAttackInterval;
+        bossScale = tuning.bossVisualScale;
     }
 
     private void BindFlow()
@@ -230,7 +341,7 @@ public class BossController : MonoBehaviour
             StopBoss();
             FireObject.SetIntensity(1f);
         }
-        else if (state == GameFlowState.GameOver)
+        else if (state == GameFlowState.GameOver || state == GameFlowState.MissionComplete)
         {
             StopBoss();
         }
@@ -240,17 +351,20 @@ public class BossController : MonoBehaviour
     {
         BossActive = true;
         BossRound = flow != null ? Mathf.Max(1, flow.BossRound) : 1;
-        Pattern = BossAttackPattern.Fan;
+        Pattern = ActivePatternAt(0f);
         BulletCount = 0;
         fireTimer = 0f;
         spin = 0f;
         volley = 0;
+        if (BKMusic.Instance != null)
+            BKMusic.Instance.SetCombatIntensity(ShieldBroken);
         SpawnVisual();
     }
 
     private void StopBoss()
     {
         BulletObject.ClearBoss();
+        ApplyBossRageVisual(false);
 
         if (boss != null)
         {
@@ -264,6 +378,10 @@ public class BossController : MonoBehaviour
         BossActive = false;
         BossRound = 0;
         fireTimer = 0f;
+        shieldBreakShakeUntil = 0f;
+        shieldBreakFlashUntil = 0f;
+        if (BKMusic.Instance != null)
+            BKMusic.Instance.SetCombatIntensity(false);
     }
 
     private void SpawnVisual()
@@ -303,6 +421,9 @@ public class BossController : MonoBehaviour
             bodies[i].detectCollisions = false;
         }
 
+        CacheBossVisuals();
+        ApplyBossRageVisual(ShieldBroken);
+
         MoveBoss();
     }
 
@@ -312,6 +433,8 @@ public class BossController : MonoBehaviour
             return;
 
         float offset = Mathf.Sin(Time.time * 0.7f) * 0.13f;
+        if (Time.unscaledTime < shieldBreakShakeUntil)
+            offset += Mathf.Sin(Time.unscaledTime * 62f) * 0.055f;
         boss.transform.position = ArenaPos(0.5f + offset, 0.82f);
     }
 
@@ -340,14 +463,23 @@ public class BossController : MonoBehaviour
             ShootCross(count);
         else if (Pattern == BossAttackPattern.Homing)
             ShootHoming(count);
+        else if (Pattern == BossAttackPattern.Ring)
+            ShootRing(count);
 
         volley++;
-        if (BossRound >= 2 && Pattern != BossAttackPattern.Cross && volley % 2 == 0)
+        CombatTuningData tuning = GameDataMgr.Instance.Tuning;
+        int coreCadence = ShieldBroken ? tuning.bossRageCoreCadence : tuning.bossNormalCoreCadence;
+        if (IsFifthCampaign() && volley % coreCadence == 1)
+            ShootReflectCore();
+
+        if ((BossRound >= tuning.bossExtraCrossRound || ShieldBroken) &&
+            Pattern != BossAttackPattern.Cross && volley % 2 == 0)
         {
             ShootCross(4);
         }
 
-        if (BossRound >= 3 && Pattern != BossAttackPattern.Homing && volley % 3 == 0)
+        if ((BossRound >= tuning.bossExtraHomingRound || ShieldBroken) &&
+            Pattern != BossAttackPattern.Homing && volley % 3 == 0)
         {
             ShootHoming(1);
         }
@@ -376,6 +508,17 @@ public class BossController : MonoBehaviour
         }
 
         spin = (spin + 18f + BossRound * 3f) % 360f;
+    }
+
+    private void ShootRing(int count)
+    {
+        float step = 360f / count;
+        float start = volley % 2 == 0 ? 0f : step * 0.5f;
+        for (int i = 0; i < count; i++)
+        {
+            Vector3 dir = Quaternion.AngleAxis(start + step * i, Vector3.up) * Vector3.forward;
+            SpawnBullet(9 + ColorIndex(), dir);
+        }
     }
 
     private void ShootCross(int count)
@@ -425,7 +568,27 @@ public class BossController : MonoBehaviour
         return (Mathf.Max(1, BossRound) - 1) % 4;
     }
 
-    private void SpawnBullet(int id, Vector3 dir)
+    private BossAttackPattern ActivePatternAt(float progress)
+    {
+        int levelId = GameDataMgr.Instance.IsEndless ? 0 : GameDataMgr.Instance.selectedLevelId;
+        int phase = levelId == 5 && !ShieldBroken ? 1 : BossRound;
+        if (levelId == 5 && ShieldBroken)
+            phase = Mathf.Max(2, phase);
+        return CampaignPatternAt(progress, phase, levelId);
+    }
+
+    private void ShootReflectCore()
+    {
+        SpawnBullet(4, PlayerDir(), BulletInteraction.ReflectCore, 0.65f);
+    }
+
+    private bool IsFifthCampaign()
+    {
+        return !GameDataMgr.Instance.IsEndless && GameDataMgr.Instance.selectedLevelId == 5;
+    }
+
+    private void SpawnBullet(int id, Vector3 dir, BulletInteraction interaction = BulletInteraction.Normal,
+        float speedMultiplier = 1f)
     {
         if (boss == null || dir.sqrMagnitude < 0.001f)
             return;
@@ -445,13 +608,96 @@ public class BossController : MonoBehaviour
         if (shot == null)
         {
             shot = bullet.AddComponent<BulletObject>();
+            PooledObject pooled = bullet.GetComponent<PooledObject>();
+            if (pooled != null)
+                pooled.RefreshCallbacks();
         }
 
         dir.Normalize();
         bullet.transform.position = boss.transform.position + dir * 7f;
         bullet.transform.rotation = Quaternion.LookRotation(dir);
-        shot.Init(info, BulletSource.Boss, GameDataMgr.Instance.BossBulletSpeed());
+        shot.Init(info, BulletSource.Boss, GameDataMgr.Instance.BossBulletSpeed() * speedMultiplier);
+        shot.ConfigureInteraction(interaction);
+        shot.ConfigureRageVisual(ShieldBroken && interaction == BulletInteraction.Normal);
         BulletCount++;
+    }
+
+    private void CacheBossVisuals()
+    {
+        bossRenderers = boss != null ? boss.GetComponentsInChildren<Renderer>(true) : new Renderer[0];
+        bossLights = boss != null ? boss.GetComponentsInChildren<Light>(true) : new Light[0];
+        bossLightColors = new Color[bossLights.Length];
+        bossLightIntensities = new float[bossLights.Length];
+        for (int i = 0; i < bossLights.Length; i++)
+        {
+            bossLightColors[i] = bossLights[i] != null ? bossLights[i].color : Color.white;
+            bossLightIntensities[i] = bossLights[i] != null ? bossLights[i].intensity : 1f;
+        }
+    }
+
+    private void ApplyBossRageVisual(bool active)
+    {
+        RageVisualActive = active && boss != null;
+        if (bossVisualBlock == null)
+            bossVisualBlock = new MaterialPropertyBlock();
+        for (int i = 0; i < bossRenderers.Length; i++)
+        {
+            Renderer renderer = bossRenderers[i];
+            if (renderer == null)
+                continue;
+            if (!RageVisualActive)
+            {
+                renderer.SetPropertyBlock(null);
+                continue;
+            }
+            bossVisualBlock.Clear();
+            bossVisualBlock.SetColor("_Color", new Color(1f, 0.08f, 0.2f, 1f));
+            bossVisualBlock.SetColor("_BaseColor", new Color(1f, 0.08f, 0.2f, 1f));
+            bossVisualBlock.SetColor("_EmissionColor", new Color(1f, 0.02f, 0.08f, 1f) * 3f);
+            renderer.SetPropertyBlock(bossVisualBlock);
+        }
+        for (int i = 0; i < bossLights.Length; i++)
+        {
+            if (bossLights[i] == null)
+                continue;
+            bossLights[i].color = RageVisualActive ? new Color(1f, 0.05f, 0.12f) :
+                (i < bossLightColors.Length ? bossLightColors[i] : Color.white);
+            bossLights[i].intensity = RageVisualActive ? 3.2f :
+                (i < bossLightIntensities.Length ? bossLightIntensities[i] : 1f);
+        }
+    }
+
+    private void DrawReflection(Vector3 origin)
+    {
+        if (boss == null)
+            return;
+        if (reflectionMaterial == null)
+            reflectionMaterial = new Material(Shader.Find("Sprites/Default"));
+        if (reflectedBeam == null)
+        {
+            reflectedBeam = new GameObject("ReflectedCoreBeam");
+            reflectedBeamLine = reflectedBeam.AddComponent<LineRenderer>();
+            reflectedBeamLine.sharedMaterial = reflectionMaterial;
+            reflectedBeamLine.useWorldSpace = true;
+            reflectedBeamLine.positionCount = 2;
+            reflectedBeamLine.startWidth = 2.2f;
+            reflectedBeamLine.endWidth = 0.7f;
+            reflectedBeamLine.startColor = new Color(1f, 0.75f, 0.1f, 1f);
+            reflectedBeamLine.endColor = new Color(0.2f, 1f, 1f, 0.8f);
+            reflectedBeamLine.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            reflectedBeamLine.receiveShadows = false;
+        }
+        CancelInvoke(nameof(HideReflection));
+        reflectedBeam.SetActive(true);
+        reflectedBeamLine.SetPosition(0, origin);
+        reflectedBeamLine.SetPosition(1, boss.transform.position);
+        Invoke(nameof(HideReflection), 0.2f);
+    }
+
+    private void HideReflection()
+    {
+        if (reflectedBeam != null)
+            reflectedBeam.SetActive(false);
     }
 
     private static void DestroyNow(Object target)

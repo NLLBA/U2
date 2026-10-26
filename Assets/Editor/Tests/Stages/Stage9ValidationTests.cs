@@ -179,8 +179,9 @@ public class Stage9ValidationTests
         Assert.Greater(director.ThreatLevel, 1);
 
         flow.Advance(100f);
-        Assert.AreEqual(GameFlowState.BossSurvival, flow.State);
+        Assert.AreEqual(GameFlowState.Normal, flow.State);
         Assert.AreEqual(2, flow.BossRound);
+        Assert.AreEqual(2, flow.BossRounds);
         for (int i = 0; i < 12; i++)
         {
             Assert.IsTrue(score.RegisterClear());
@@ -219,7 +220,7 @@ public class Stage9ValidationTests
         Assert.AreEqual(score.TotalScore, saved.score);
         Assert.AreEqual(250, saved.runTime);
         Assert.AreEqual("困难", saved.difficulty);
-        Assert.AreEqual(1, saved.bosses);
+        Assert.AreEqual(2, saved.bosses);
         Assert.AreEqual(12, saved.clears);
     }
 

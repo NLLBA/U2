@@ -20,11 +20,23 @@ public class ChoosePanel : BasePanel<ChoosePanel>
     private GameObject heroObj;
     private float time;
     private bool isSel;
+    private string startButtonText;
+    private UILabel heroDetailLabel;
+    private Vector3 heroBaseLocalPosition;
+    private bool hasHeroBasePosition;
+
+    private const float HeroBobAmplitude = 4f;
+    private const float HeroBobSpeed = 1.5f;
 
     public override void Init()
     {
+        CacheStartButtonText();
+        CacheHeroBasePosition();
+        BuildHeroDetails();
         btnClose.onClick.Add(new EventDelegate(() =>
         {
+            if (IsNetworkSelection())
+                NetworkBattleSession.Instance.Leave();
             Hideme();
             BeginPanel.Instance.Showme();
         }));
@@ -51,6 +63,11 @@ public class ChoosePanel : BasePanel<ChoosePanel>
 
         btnStart.onClick.Add(new EventDelegate(() =>
         {
+            if (IsNetworkSelection())
+            {
+                NetworkBattleSession.Instance.ConfirmCharacter();
+                return;
+            }
             if (DifficultyPanel.Instance != null)
             {
                 DifficultyPanel.Instance.Showme();
@@ -58,7 +75,8 @@ public class ChoosePanel : BasePanel<ChoosePanel>
             }
             else
             {
-                Debug.LogError("DifficultyPanel not found. Run Tools/U2/搭建毕设UI first.");
+                GameLog.Error(GameLogCategory.Data, "DIFFICULTY_PANEL_MISSING",
+                    "DifficultyPanel not found. Run Tools/U2/搭建毕设UI first.");
             }
         }));
 
@@ -69,13 +87,29 @@ public class ChoosePanel : BasePanel<ChoosePanel>
     {
         RoleInfo info = GameDataMgr.Instance.GetHero();
         if (labHero != null)
+        {
+            labHero.transform.localPosition = new Vector3(-170f, 242f, 0f);
+            labHero.width = 390;
+            labHero.height = 44;
+            labHero.maxLineCount = 1;
+            labHero.overflowMethod = UILabel.Overflow.ShrinkContent;
             labHero.text = HeroName(info);
+        }
+        if (heroDetailLabel != null)
+        {
+            float cooldown = PlayerObject.HeroSkillCooldown(GameDataMgr.Instance.heroIndex,
+                GameDataMgr.Instance.SkillCd());
+            heroDetailLabel.text = PlayerObject.StageAffinityText(GameDataMgr.Instance.heroIndex) +
+                "\n" + PlayerObject.RecommendedLevelText(GameDataMgr.Instance.heroIndex) + " · " +
+                PlayerObject.OperationDifficultyText(GameDataMgr.Instance.heroIndex) +
+                "\n技能冷却：" + cooldown.ToString("0.#") + "秒";
+        }
         DestroyHero();
 
         GameObject prefab = Resources.Load<GameObject>(info.asset);
         if (prefab == null)
         {
-            Debug.LogError("Hero resource not found: " + info.asset);
+            GameLog.Error(GameLogCategory.Data, "HERO_RESOURCE_MISSING", info.asset);
             return;
         }
 
@@ -107,6 +141,61 @@ public class ChoosePanel : BasePanel<ChoosePanel>
         return separator >= 0 ? normalized.Substring(separator + 1) : normalized;
     }
 
+    private void BuildHeroDetails()
+    {
+        if (labHero == null)
+            return;
+
+        Transform backdropTransform = transform.Find("HeroDetailBackdrop");
+        if (backdropTransform == null)
+        {
+            Transform nameplate = transform.Find("Polish_HeroNameplate");
+            if (nameplate != null)
+            {
+                GameObject backdropObject = Instantiate(nameplate.gameObject, transform, false);
+                backdropObject.name = "HeroDetailBackdrop";
+                backdropTransform = backdropObject.transform;
+            }
+        }
+
+        if (backdropTransform != null)
+        {
+            backdropTransform.localPosition = new Vector3(500f, -155f, 0f);
+            UI2DSprite backdrop = backdropTransform.GetComponent<UI2DSprite>();
+            if (backdrop != null)
+            {
+                backdrop.width = 420;
+                backdrop.height = 94;
+                backdrop.color = new Color(backdrop.color.r, backdrop.color.g, backdrop.color.b, 0.82f);
+            }
+        }
+
+        Transform detailTransform = transform.Find("HeroDetailLabel");
+        if (detailTransform == null)
+        {
+            GameObject detailObject = Instantiate(labHero.gameObject, transform, false);
+            detailObject.name = "HeroDetailLabel";
+            detailTransform = detailObject.transform;
+        }
+
+        detailTransform.localPosition = new Vector3(500f, -155f, 0f);
+        heroDetailLabel = detailTransform.GetComponent<UILabel>();
+        heroDetailLabel.width = 390;
+        heroDetailLabel.height = 82;
+        heroDetailLabel.fontSize = 17;
+        heroDetailLabel.maxLineCount = 3;
+        heroDetailLabel.overflowMethod = UILabel.Overflow.ShrinkContent;
+    }
+
+    private void CacheHeroBasePosition()
+    {
+        if (heroPos == null || hasHeroBasePosition)
+            return;
+
+        heroBaseLocalPosition = heroPos.localPosition;
+        hasHeroBasePosition = true;
+    }
+
     private void DestroyHero()
     {
         if (heroObj != null)
@@ -121,27 +210,37 @@ public class ChoosePanel : BasePanel<ChoosePanel>
         base.Showme();
         GameDataMgr.Instance.heroIndex = 0;
         UpdateHero();
+        RefreshNetworkControls();
     }
 
     public void ShowCurrent()
     {
+        CacheStartButtonText();
         base.Showme();
         UpdateHero();
+        RefreshNetworkControls();
     }
 
     public override void Hideme()
     {
+        if (heroPos != null && hasHeroBasePosition)
+            heroPos.localPosition = heroBaseLocalPosition;
+        time = 0f;
         base.Hideme();
         DestroyHero();
     }
 
     private void Update()
     {
+        RefreshNetworkControls();
         if (heroPos == null)
             return;
 
+        CacheHeroBasePosition();
         time += Time.deltaTime;
-        heroPos.Translate(Vector3.up * Mathf.Sin(time) * 0.0001f, Space.World);
+        Vector3 bobbedPosition = heroBaseLocalPosition;
+        bobbedPosition.y += Mathf.Sin(time * HeroBobSpeed) * HeroBobAmplitude;
+        heroPos.localPosition = bobbedPosition;
 
         if (Input.GetMouseButtonDown(0) && uis != null)
         {
@@ -160,5 +259,32 @@ public class ChoosePanel : BasePanel<ChoosePanel>
         {
             heroPos.rotation *= Quaternion.AngleAxis(Input.GetAxis("Mouse X") * 20, Vector3.up);
         }
+    }
+
+    private static bool IsNetworkSelection()
+    {
+        return NetworkBattleSession.Instance != null &&
+            NetworkBattleSession.Instance.State == NetworkBattleSession.BattleState.SelectingCharacter;
+    }
+
+    private void RefreshNetworkControls()
+    {
+        CacheStartButtonText();
+        bool selecting = IsNetworkSelection();
+        bool confirmed = selecting && NetworkBattleSession.Instance.LocalReady;
+        btnLeft.isEnabled = !confirmed;
+        btnRight.isEnabled = !confirmed;
+        btnStart.isEnabled = !confirmed;
+        UILabel label = btnStart.GetComponentInChildren<UILabel>();
+        if (label != null)
+            label.text = selecting ? (confirmed ? "已确认，等待对手" : "确认角色") : startButtonText;
+    }
+
+    private void CacheStartButtonText()
+    {
+        if (startButtonText != null)
+            return;
+        UILabel label = btnStart.GetComponentInChildren<UILabel>();
+        startButtonText = label != null ? label.text : "下一步";
     }
 }
