@@ -1,14 +1,16 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class DifficultyStatusLabel : MonoBehaviour
 {
-    private UILabel label;
+    private Text label;
 
     private void Awake()
     {
-        label = GetComponent<UILabel>();
+        Transform view = UGUIRuntime.View(this);
+        label = view != null ? view.GetComponentInChildren<Text>(true) : null;
     }
 
     private void Update()

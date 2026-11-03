@@ -150,7 +150,7 @@ public class CampaignMissionController : MonoBehaviour
         RecordCalibration("victory");
         if (GameFlowManager.Instance != null)
             GameFlowManager.Instance.CompleteMission();
-        CampaignMissionUI.Ensure();
+        CampaignMissionUI.Ensure().ShowResultNow(this);
     }
 
     public void FailMission()
@@ -173,7 +173,7 @@ public class CampaignMissionController : MonoBehaviour
             GameFlowManager.Instance.GameOver();
         else
             Time.timeScale = 0f;
-        CampaignMissionUI.Ensure();
+        CampaignMissionUI.Ensure().ShowResultNow(this);
     }
 
     public int CalculateStars()

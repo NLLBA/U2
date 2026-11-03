@@ -3,6 +3,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 /// <summary>
 /// 联网双人生存竞技 UI。
@@ -24,31 +25,31 @@ public class NetworkBattleUI : MonoBehaviour
     private GameObject viewRoot;
     private GameObject menuEntry;
     private GameObject recoveryNoticeObject;
-    private UI2DSprite scrimTemplate;
-    private UI2DSprite panelTemplate;
-    private UI2DSprite inputTemplate;
-    private UI2DSprite buttonTemplate;
-    private UI2DSprite accentTemplate;
-    private UILabel templateLabel;
+    private Image scrimTemplate;
+    private Image panelTemplate;
+    private Image inputTemplate;
+    private Button buttonTemplate;
+    private Image accentTemplate;
 
-    private UIInput nameInput;
-    private UIInput addressInput;
-    private UIInput portInput;
-    private UIInput roomCodeInput;
-    private UILabel lobbyStateLabel;
-    private UILabel lobbyHintLabel;
-    private UILabel lobbyPlayersLabel;
-    private UILabel lobbyResultLabel;
-    private UILabel localHudLabel;
-    private UILabel remoteHudLabel;
-    private UILabel hudStateLabel;
-    private UILabel hudRuleLabel;
-    private UILabel hudResultLabel;
-    private UILabel lobbyLevelLabel;
-    private UILabel rematchStatusLabel;
-    private UIButton lobbyReadyButton;
-    private UIButton hostConnectButton;
-    private UIButton joinConnectButton;
+    private Text templateLabel;
+    private InputField nameInput;
+    private InputField addressInput;
+    private InputField portInput;
+    private InputField roomCodeInput;
+    private Text lobbyStateLabel;
+    private Text lobbyHintLabel;
+    private Text lobbyPlayersLabel;
+    private Text lobbyResultLabel;
+    private Text localHudLabel;
+    private Text remoteHudLabel;
+    private Text hudStateLabel;
+    private Text hudRuleLabel;
+    private Text hudResultLabel;
+    private Text lobbyLevelLabel;
+    private Text rematchStatusLabel;
+    private Button lobbyReadyButton;
+    private Button hostConnectButton;
+    private Button joinConnectButton;
 
     private bool showLobby;
     private string playerName = "Player";
@@ -149,14 +150,14 @@ public class NetworkBattleUI : MonoBehaviour
 
     private void CaptureInputValues()
     {
-        if (nameInput != null && !string.IsNullOrEmpty(nameInput.value))
-            playerName = nameInput.value;
+        if (nameInput != null && !string.IsNullOrEmpty(nameInput.text))
+            playerName = nameInput.text;
         if (addressInput != null)
-            address = addressInput.value;
-        if (portInput != null && !string.IsNullOrEmpty(portInput.value))
-            portText = portInput.value;
+            address = addressInput.text;
+        if (portInput != null && !string.IsNullOrEmpty(portInput.text))
+            portText = portInput.text;
         if (roomCodeInput != null)
-            roomCode = roomCodeInput.value;
+            roomCode = roomCodeInput.text;
     }
 
     private void RebuildView(string scene, NetworkBattleSession.BattleState state)
@@ -191,6 +192,21 @@ public class NetworkBattleUI : MonoBehaviour
         {
             BuildConnectionLost();
         }
+
+        PresentView();
+    }
+
+    private void PresentView()
+    {
+        if (viewRoot == null)
+            return;
+
+        // Dynamic screens are built off-screen so their unstyled Image components can
+        // never produce a one-frame black flash before the visual system upgrades them.
+        UGUIVisualSystem.RefreshNow();
+        Canvas.ForceUpdateCanvases();
+        viewRoot.SetActive(true);
+        Canvas.ForceUpdateCanvases();
     }
 
     private void DestroyView()
@@ -224,8 +240,7 @@ public class NetworkBattleUI : MonoBehaviour
 
     private Transform GetUiParent()
     {
-        UIRoot root = FindObjectOfType<UIRoot>();
-        return root != null ? root.transform : null;
+        return UGUIRuntime.Root;
     }
 
     private void CacheTemplates()
@@ -234,24 +249,25 @@ public class NetworkBattleUI : MonoBehaviour
         if (parent == null)
             return;
 
-        scrimTemplate = panelTemplate = inputTemplate = buttonTemplate = accentTemplate = null;
-        UI2DSprite fallbackButtonTemplate = null;
+        scrimTemplate = panelTemplate = inputTemplate = accentTemplate = null;
+        buttonTemplate = null;
+        Button fallbackButtonTemplate = null;
         // Hidden scene panels own the authored assets. Exclude previous dynamic views,
         // which may still exist until the end of this frame after DestroyView().
-        foreach (UI2DSprite sprite in parent.GetComponentsInChildren<UI2DSprite>(true))
+        foreach (Image image in parent.GetComponentsInChildren<Image>(true))
         {
-            UIPanel owner = NGUITools.FindInParents<UIPanel>(sprite.gameObject);
-            if (sprite.sprite2D == null || (owner != null && owner.name.StartsWith("NetworkBattle")))
+            if (image.sprite == null || image.transform.root.name.StartsWith("NetworkBattle"))
                 continue;
-            if (fallbackButtonTemplate == null && sprite.sprite2D.name.StartsWith("ui_button_"))
-                fallbackButtonTemplate = sprite;
-            switch (sprite.sprite2D.name)
+            Button candidate = image.GetComponent<Button>();
+            if (fallbackButtonTemplate == null && candidate != null && image.sprite.name.StartsWith("ui_button_"))
+                fallbackButtonTemplate = candidate;
+            switch (image.sprite.name)
             {
-                case "ui_scrim": scrimTemplate = sprite; break;
-                case "ui_panel": panelTemplate = sprite; break;
-                case "ui_input": inputTemplate = sprite; break;
-                case "ui_button_primary": buttonTemplate = sprite; break;
-                case "ui_accent": accentTemplate = sprite; break;
+                case "ui_scrim": scrimTemplate = image; break;
+                case "ui_panel": panelTemplate = image; break;
+                case "ui_input": inputTemplate = image; break;
+                case "ui_button_primary": buttonTemplate = candidate; break;
+                case "ui_accent": accentTemplate = image; break;
             }
         }
 
@@ -259,7 +275,7 @@ public class NetworkBattleUI : MonoBehaviour
             buttonTemplate = fallbackButtonTemplate;
 
         if (BeginPanel.Instance != null)
-            templateLabel = BeginPanel.Instance.btnBegin.GetComponentInChildren<UILabel>(true);
+            templateLabel = UGUIRuntime.Label(BeginPanel.Instance.btnBegin);
         else if (GamePanel.Instance != null)
             templateLabel = GamePanel.Instance.labTime;
     }
@@ -267,15 +283,11 @@ public class NetworkBattleUI : MonoBehaviour
     private void CreateViewRoot(string name, int panelDepth)
     {
         Transform parent = GetUiParent();
-        viewRoot = new GameObject(name);
-        if (parent != null)
-        {
-            viewRoot.transform.SetParent(parent, false);
-            viewRoot.layer = parent.gameObject.layer;
-        }
-
-        UIPanel panel = viewRoot.AddComponent<UIPanel>();
-        panel.depth = panelDepth;
+        if (parent == null)
+            return;
+        UGUIRuntime.EnsureEventSystem();
+        viewRoot = UGUIRuntime.CreateRect(parent, name, Vector3.zero, 1920, 1080).gameObject;
+        viewRoot.SetActive(false);
         CacheTemplates();
     }
 
@@ -286,30 +298,29 @@ public class NetworkBattleUI : MonoBehaviour
             return;
 
         // Clone the authored start button to retain its texture, typography and hover animation.
-        menuEntry = Instantiate(menu.btnBegin.gameObject, menu.transform, false);
+        menuEntry = Instantiate(UGUIRuntime.ControlRoot(menu.btnBegin), UGUIRuntime.View(menu), false);
         menuEntry.name = "NetworkBattleEntryButton";
-        menuEntry.transform.localPosition = new Vector3(625f, 86f, 0f);
-        menuEntry.GetComponentInChildren<UILabel>().text = "联网模式";
-        UIButton button = menuEntry.GetComponent<UIButton>();
-        button.onClick.Clear();
-        button.onClick.Add(new EventDelegate(OpenLobby));
-        menu.btnRank.transform.localPosition = new Vector3(625f, -18f, 0f);
-        menu.btnSetting.transform.localPosition = new Vector3(625f, -122f, 0f);
-        menu.btnQuit.transform.localPosition = new Vector3(625f, -226f, 0f);
+        UGUIRuntime.SetPosition(menuEntry.transform, new Vector3(625f, 86f, 0f));
+        Button button = menuEntry.GetComponentInChildren<Button>(true);
+        UGUIRuntime.Label(button).text = "联网模式";
+        button.onClick.RemoveAllListeners();
+        button.onClick.AddListener(OpenLobby);
+        UGUIRuntime.SetPosition(UGUIRuntime.ControlRoot(menu.btnRank).transform, new Vector3(625f, -18f, 0f));
+        UGUIRuntime.SetPosition(UGUIRuntime.ControlRoot(menu.btnSetting).transform, new Vector3(625f, -122f, 0f));
+        UGUIRuntime.SetPosition(UGUIRuntime.ControlRoot(menu.btnQuit).transform, new Vector3(625f, -226f, 0f));
 
         if (!string.IsNullOrEmpty(startupNotice))
         {
-            UILabel template = menu.btnBegin.GetComponentInChildren<UILabel>(true);
+            Text template = UGUIRuntime.Label(menu.btnBegin);
             if (template != null)
             {
-                recoveryNoticeObject = Instantiate(template.gameObject, menu.transform, false);
+                recoveryNoticeObject = Instantiate(template.gameObject, UGUIRuntime.View(menu), false);
                 recoveryNoticeObject.name = "SaveRecoveryNotice";
-                recoveryNoticeObject.transform.localPosition = new Vector3(0f, -330f, 0f);
-                UILabel notice = recoveryNoticeObject.GetComponent<UILabel>();
-                notice.width = 980;
-                notice.height = 62;
+                UGUIRuntime.SetPosition(recoveryNoticeObject.transform, new Vector3(0f, -330f, 0f));
+                Text notice = recoveryNoticeObject.GetComponent<Text>();
+                notice.rectTransform.sizeDelta = new Vector2(980f, 62f);
                 notice.fontSize = 16;
-                notice.overflowMethod = UILabel.Overflow.ShrinkContent;
+                notice.resizeTextForBestFit = true;
                 notice.color = new Color(1f, 0.78f, 0.3f, 1f);
                 notice.text = startupNotice;
             }
@@ -321,14 +332,12 @@ public class NetworkBattleUI : MonoBehaviour
         if (BeginPanel.Instance != null)
             BeginPanel.Instance.Hideme();
         CreateViewRoot("NetworkBattleLobby", 80);
-        UI2DSprite scrim = CreateSprite(viewRoot.transform, "LobbyScrim", Vector3.zero, 4000, 2400, "Dark", new Color(1f, 1f, 1f, 0.75f), true);
-        CopySpriteStyle(scrim, scrimTemplate);
-        scrim.depth = -100;
-        CreateSprite(viewRoot.transform, "LobbyPanel", Vector3.zero, 1180, 760, "Dark", PanelColor, true);
-        CreateSprite(viewRoot.transform, "LobbyAccent", new Vector3(0f, 245f, 0f), 1000, 4, "Bright", AccentColor, false);
+        CreateSprite(viewRoot.transform, "LobbyScrim", Vector3.zero, 4000, 2400, "Dark", new Color(0f, 0.015f, 0.03f, 0.52f), true);
+        CreateSprite(viewRoot.transform, "LobbyPanel", Vector3.zero, 1160, 720, "Dark", PanelColor, true);
+        CreateSprite(viewRoot.transform, "LobbyAccent", new Vector3(0f, 215f, 0f), 1000, 4, "Bright", AccentColor, false);
 
-        CreateLabel(viewRoot.transform, "LobbyTitle", new Vector3(0f, 310f, 0f), 900, 58, "联网双人对战", 34, TextColor, NGUIText.Alignment.Center);
-        CreateLabel(viewRoot.transform, "LobbySubtitle", new Vector3(0f, 270f, 0f), 900, 32, "房主选关  ·  独立计分  ·  无尽生存竞技", 17, MutedTextColor, NGUIText.Alignment.Center);
+        CreateLabel(viewRoot.transform, "LobbyTitle", new Vector3(0f, 286f, 0f), 900, 52, "联网双人对战", 30, TextColor, TextAnchor.MiddleCenter);
+        CreateLabel(viewRoot.transform, "LobbySubtitle", new Vector3(0f, 248f, 0f), 900, 30, "房主选关  ·  独立计分  ·  无尽生存竞技", 16, MutedTextColor, TextAnchor.MiddleCenter);
 
         if (session.State == NetworkBattleSession.BattleState.Idle || session.State == NetworkBattleSession.BattleState.Error)
         {
@@ -346,78 +355,80 @@ public class NetworkBattleUI : MonoBehaviour
 
     private void BuildJoinForm()
     {
-        UIButton publicButton = CreateButton(viewRoot.transform, "PublicModeButton", new Vector3(-235f, 200f, 0f), 420, 48,
+        Button publicButton = CreateButton(viewRoot.transform, "PublicModeButton", new Vector3(-220f, 180f, 0f), 360, 46,
             "互联网房间" + (publicMode ? " · 已选" : ""), publicMode ? AccentColor : MutedTextColor);
-        UIButton lanButton = CreateButton(viewRoot.transform, "LanModeButton", new Vector3(235f, 200f, 0f), 420, 48,
+        Button lanButton = CreateButton(viewRoot.transform, "LanModeButton", new Vector3(220f, 180f, 0f), 360, 46,
             "局域网直连" + (!publicMode ? " · 已选" : ""), !publicMode ? AccentColor : MutedTextColor);
-        publicButton.onClick.Add(new EventDelegate(UsePublicMode));
-        lanButton.onClick.Add(new EventDelegate(UseLanMode));
-        CreateLabel(viewRoot.transform, "FormHint", new Vector3(0f, 135f, 0f), 1000, 55,
+        ApplySelectionStyle(publicButton, publicMode);
+        ApplySelectionStyle(lanButton, !publicMode);
+        publicButton.onClick.AddListener(UsePublicMode);
+        lanButton.onClick.AddListener(UseLanMode);
+        CreateLabel(viewRoot.transform, "FormHint", new Vector3(0f, 120f, 0f), 1000, 52,
             publicMode ? "双方可以使用不同 Wi-Fi 或手机热点。\n房主创建房间后，把 6 位房间码发给另一方即可。" :
             "局域网直连需要连接同一网络。\n另一方输入房主 IP 和相同端口加入；127.0.0.1 仅限本机双开。",
-            16, MutedTextColor, NGUIText.Alignment.Center);
+            16, MutedTextColor, TextAnchor.MiddleCenter);
 
-        nameInput = CreateInput(viewRoot.transform, "NameInput", new Vector3(80f, 55f, 0f), 760, 64, "飞行员代号", playerName, 16);
+        nameInput = CreateInput(viewRoot.transform, "NameInput", new Vector3(60f, 48f, 0f), 700, 58, "飞行员代号", playerName, 16);
         if (publicMode)
         {
-            roomCodeInput = CreateInput(viewRoot.transform, "RoomCodeInput", new Vector3(80f, -30f, 0f), 760, 64, "6 位房间码", roomCode, 6);
-            roomCodeInput.validation = UIInput.Validation.Integer;
+            roomCodeInput = CreateInput(viewRoot.transform, "RoomCodeInput", new Vector3(60f, -28f, 0f), 700, 58, "6 位房间码", roomCode, 6);
+            roomCodeInput.contentType = InputField.ContentType.IntegerNumber;
             CreateLabel(viewRoot.transform, "RelayNotice", new Vector3(0f, -105f, 0f), 1000, 50,
                 RelayNoticeText("创建房间时无需填写房间码。"),
-                16, MutedTextColor, NGUIText.Alignment.Center);
+                16, MutedTextColor, TextAnchor.MiddleCenter);
         }
         else
         {
-            addressInput = CreateInput(viewRoot.transform, "AddressInput", new Vector3(80f, -30f, 0f), 760, 64, "房主 IP 地址", address, 32);
-            portInput = CreateInput(viewRoot.transform, "PortInput", new Vector3(80f, -115f, 0f), 760, 64, "端口（默认 7777）", portText, 6);
+            addressInput = CreateInput(viewRoot.transform, "AddressInput", new Vector3(60f, -28f, 0f), 700, 58, "房主 IP 地址", address, 32);
+            portInput = CreateInput(viewRoot.transform, "PortInput", new Vector3(60f, -104f, 0f), 700, 58, "端口（默认 7777）", portText, 6);
         }
 
-        hostConnectButton = CreateButton(viewRoot.transform, "HostButton", new Vector3(-200f, -185f, 0f), 300, 70, "创建房间", AccentColor);
-        joinConnectButton = CreateButton(viewRoot.transform, "JoinButton", new Vector3(200f, -185f, 0f), 300, 70, "加入房间", TextColor);
-        hostConnectButton.onClick.Add(new EventDelegate(StartHost));
-        joinConnectButton.onClick.Add(new EventDelegate(StartJoin));
+        hostConnectButton = CreateButton(viewRoot.transform, "HostButton", new Vector3(-180f, -176f, 0f), 270, 58, "创建房间", AccentColor);
+        joinConnectButton = CreateButton(viewRoot.transform, "JoinButton", new Vector3(180f, -176f, 0f), 270, 58, "加入房间", TextColor);
+        hostConnectButton.onClick.AddListener(StartHost);
+        joinConnectButton.onClick.AddListener(StartJoin);
 
-        UIButton closeButton = CreateButton(viewRoot.transform, "CloseButton", new Vector3(0f, -260f, 0f), 240, 54, "返回", MutedTextColor);
-        closeButton.onClick.Add(new EventDelegate(CloseLobby));
+        Button closeButton = CreateButton(viewRoot.transform, "CloseButton", new Vector3(0f, -254f, 0f), 220, 50, "返回", MutedTextColor);
+        closeButton.onClick.AddListener(CloseLobby);
 
         if (session.State == NetworkBattleSession.BattleState.Error)
         {
-            CreateLabel(viewRoot.transform, "ErrorLabel", new Vector3(0f, -330f, 0f), 1080, 80, "连接失败：" + session.LastError, 17, ErrorColor, NGUIText.Alignment.Center);
+            CreateLabel(viewRoot.transform, "ErrorLabel", new Vector3(0f, -330f, 0f), 1080, 80, "连接失败：" + session.LastError, 17, ErrorColor, TextAnchor.MiddleCenter);
         }
     }
 
     private void BuildWaitingRoom()
     {
         lobbyStateLabel = CreateLabel(viewRoot.transform, "LobbyState", new Vector3(0f, 200f, 0f), 900, 48,
-            StateText(session.State), 24, AccentColor, NGUIText.Alignment.Center);
+            StateText(session.State), 24, AccentColor, TextAnchor.MiddleCenter);
         lobbyHintLabel = CreateLabel(viewRoot.transform, "LobbyHint", new Vector3(0f, 145f, 0f), 1080, 72,
-            "", 18, MutedTextColor, NGUIText.Alignment.Center);
-        lobbyPlayersLabel = CreateLabel(viewRoot.transform, "LobbyPlayers", new Vector3(0f, 60f, 0f), 900, 70, "", 20, TextColor, NGUIText.Alignment.Center);
+            "", 18, MutedTextColor, TextAnchor.MiddleCenter);
+        lobbyPlayersLabel = CreateLabel(viewRoot.transform, "LobbyPlayers", new Vector3(0f, 60f, 0f), 900, 70, "", 20, TextColor, TextAnchor.MiddleCenter);
         lobbyLevelLabel = CreateLabel(viewRoot.transform, "LobbyLevel", new Vector3(0f, -5f, 0f), 650, 44,
-            "", 20, AccentColor, NGUIText.Alignment.Center);
+            "", 20, AccentColor, TextAnchor.MiddleCenter);
         if (session.IsHost)
         {
-            UIButton previous = CreateButton(viewRoot.transform, "PreviousLevelButton", new Vector3(-390f, -5f, 0f), 58, 52, "<", TextColor);
-            previous.onClick.Add(new EventDelegate(PreviousNetworkLevel));
-            UIButton next = CreateButton(viewRoot.transform, "NextLevelButton", new Vector3(390f, -5f, 0f), 58, 52, ">", TextColor);
-            next.onClick.Add(new EventDelegate(NextNetworkLevel));
+            Button previous = CreateButton(viewRoot.transform, "PreviousLevelButton", new Vector3(-390f, -5f, 0f), 58, 52, "<", TextColor);
+            previous.onClick.AddListener(PreviousNetworkLevel);
+            Button next = CreateButton(viewRoot.transform, "NextLevelButton", new Vector3(390f, -5f, 0f), 58, 52, ">", TextColor);
+            next.onClick.AddListener(NextNetworkLevel);
         }
         CreateLabel(viewRoot.transform, "WaitingRules", new Vector3(0f, -80f, 0f), 1000, 50,
-            MatchRulesText(), 16, MutedTextColor, NGUIText.Alignment.Center);
+            MatchRulesText(), 16, MutedTextColor, TextAnchor.MiddleCenter);
 
         if (session.State == NetworkBattleSession.BattleState.Waiting || session.State == NetworkBattleSession.BattleState.Ready)
         {
             lobbyReadyButton = CreateButton(viewRoot.transform, "ReadyButton", new Vector3(0f, -165f, 0f), 360, 70, "准备开始", AccentColor);
-            lobbyReadyButton.onClick.Add(new EventDelegate(SetReady));
+            lobbyReadyButton.onClick.AddListener(SetReady);
         }
 
-        UIButton leaveButton = CreateButton(viewRoot.transform, "LeaveButton", new Vector3(0f, -270f, 0f), 280, 56, "退出房间", MutedTextColor);
-        leaveButton.onClick.Add(new EventDelegate(LeaveRoom));
+        Button leaveButton = CreateButton(viewRoot.transform, "LeaveButton", new Vector3(0f, -270f, 0f), 280, 56, "退出房间", MutedTextColor);
+        leaveButton.onClick.AddListener(LeaveRoom);
         if (session.IsHost)
         {
-            UIButton copyButton = CreateButton(viewRoot.transform, "CopyAddressButton", new Vector3(0f, -345f, 0f), 300, 44,
+            Button copyButton = CreateButton(viewRoot.transform, "CopyAddressButton", new Vector3(0f, -345f, 0f), 300, 44,
                 session.IsRelayRoom ? "复制房间码" : "复制房主 IP", TextColor);
-            copyButton.onClick.Add(new EventDelegate(CopyHostAddress));
+            copyButton.onClick.AddListener(CopyHostAddress);
         }
         RefreshDynamicText();
     }
@@ -425,15 +436,15 @@ public class NetworkBattleUI : MonoBehaviour
     private void BuildLobbyFinished()
     {
         lobbyResultLabel = CreateLabel(viewRoot.transform, "LobbyResult", new Vector3(0f, 145f, 0f), 900, 58,
-            session.ResultText, 28, AccentColor, NGUIText.Alignment.Center);
+            session.ResultText, 28, AccentColor, TextAnchor.MiddleCenter);
         CreateLabel(viewRoot.transform, "LobbyScore", new Vector3(0f, 55f, 0f), 900, 70,
             session.LocalPlayerName + "  " + session.LocalScore + " 分    ·    " + session.RemotePlayerName + "  " + session.RemoteScore + " 分",
-            22, TextColor, NGUIText.Alignment.Center);
+            22, TextColor, TextAnchor.MiddleCenter);
         CreateLabel(viewRoot.transform, "LobbyTime", new Vector3(0f, -20f, 0f), 900, 40,
-            FormatTime(session.LocalTime) + "    ·    " + FormatTime(session.RemoteTime), 18, MutedTextColor, NGUIText.Alignment.Center);
+            FormatTime(session.LocalTime) + "    ·    " + FormatTime(session.RemoteTime), 18, MutedTextColor, TextAnchor.MiddleCenter);
 
-        UIButton leaveButton = CreateButton(viewRoot.transform, "FinishedLeaveButton", new Vector3(0f, -180f, 0f), 320, 64, "退出房间", AccentColor);
-        leaveButton.onClick.Add(new EventDelegate(LeaveRoom));
+        Button leaveButton = CreateButton(viewRoot.transform, "FinishedLeaveButton", new Vector3(0f, -180f, 0f), 320, 64, "退出房间", AccentColor);
+        leaveButton.onClick.AddListener(LeaveRoom);
     }
 
     private void BuildBattleHud()
@@ -454,12 +465,12 @@ public class NetworkBattleUI : MonoBehaviour
         const int panelHeight = 250;
         CreateSprite(viewRoot.transform, "HudPanel", new Vector3(625f, 500f - panelHeight * 0.5f, 0f), 500, panelHeight, "Dark", PanelColor, true);
         CreateSprite(viewRoot.transform, "HudAccent", new Vector3(625f, 490f, 0f), 380, 4, "Bright", AccentColor, false);
-        CreateLabel(viewRoot.transform, "HudTitle", new Vector3(625f, 452f, 0f), 460, 34, "双人存活竞技", 20, TextColor, NGUIText.Alignment.Center);
+        CreateLabel(viewRoot.transform, "HudTitle", new Vector3(625f, 452f, 0f), 460, 34, "双人存活竞技", 20, TextColor, TextAnchor.MiddleCenter);
 
-        localHudLabel = CreateLabel(viewRoot.transform, "LocalHud", new Vector3(625f, 405f, 0f), 460, 32, "", 16, TextColor, NGUIText.Alignment.Center);
-        remoteHudLabel = CreateLabel(viewRoot.transform, "RemoteHud", new Vector3(625f, 365f, 0f), 460, 32, "", 16, TextColor, NGUIText.Alignment.Center);
-        hudStateLabel = CreateLabel(viewRoot.transform, "HudState", new Vector3(625f, 325f, 0f), 460, 30, "", 15, MutedTextColor, NGUIText.Alignment.Center);
-        hudRuleLabel = CreateLabel(viewRoot.transform, "HudRules", new Vector3(625f, 285f, 0f), 460, 30, "", 15, AccentColor, NGUIText.Alignment.Center);
+        localHudLabel = CreateLabel(viewRoot.transform, "LocalHud", new Vector3(625f, 405f, 0f), 460, 32, "", 16, TextColor, TextAnchor.MiddleCenter);
+        remoteHudLabel = CreateLabel(viewRoot.transform, "RemoteHud", new Vector3(625f, 365f, 0f), 460, 32, "", 16, TextColor, TextAnchor.MiddleCenter);
+        hudStateLabel = CreateLabel(viewRoot.transform, "HudState", new Vector3(625f, 325f, 0f), 460, 30, "", 15, MutedTextColor, TextAnchor.MiddleCenter);
+        hudRuleLabel = CreateLabel(viewRoot.transform, "HudRules", new Vector3(625f, 285f, 0f), 460, 30, "", 15, AccentColor, TextAnchor.MiddleCenter);
 
         RefreshDynamicText();
     }
@@ -474,23 +485,21 @@ public class NetworkBattleUI : MonoBehaviour
     {
         HideSoloResults();
         CreateViewRoot("NetworkBattleWaitingResult", 90);
-        UI2DSprite scrim = CreateSprite(viewRoot.transform, "WaitingResultScrim", Vector3.zero, 4000, 2400,
-            "Dark", new Color(1f, 1f, 1f, 0.84f), true);
-        CopySpriteStyle(scrim, scrimTemplate);
-        scrim.depth = -100;
+        CreateSprite(viewRoot.transform, "WaitingResultScrim", Vector3.zero, 4000, 2400,
+            "Dark", new Color(0f, 0.015f, 0.03f, 0.78f), true);
         CreateSprite(viewRoot.transform, "WaitingResultPanel", Vector3.zero, 1080, 580, "Dark", PanelColor, true);
         CreateLabel(viewRoot.transform, "WaitingResultTitle", new Vector3(0f, 180f, 0f), 940, 64,
-            "你已阵亡，等待对局结束", 36, AccentColor, NGUIText.Alignment.Center);
+            "你已阵亡，等待对局结束", 36, AccentColor, TextAnchor.MiddleCenter);
         CreateLabel(viewRoot.transform, "WaitingResultHint", new Vector3(0f, 100f, 0f), 940, 70,
-            "本局成绩已保留，请保持连接\n对手结束后将自动显示最终胜负", 21, TextColor, NGUIText.Alignment.Center);
+            "本局成绩已保留，请保持连接\n对手结束后将自动显示最终胜负", 21, TextColor, TextAnchor.MiddleCenter);
         localHudLabel = CreateLabel(viewRoot.transform, "WaitingLocalScore", new Vector3(0f, 5f, 0f), 940, 42,
-            "", 24, TextColor, NGUIText.Alignment.Center);
+            "", 24, TextColor, TextAnchor.MiddleCenter);
         remoteHudLabel = CreateLabel(viewRoot.transform, "WaitingRemoteScore", new Vector3(0f, -65f, 0f), 940, 42,
-            "", 24, AccentColor, NGUIText.Alignment.Center);
+            "", 24, AccentColor, TextAnchor.MiddleCenter);
         hudStateLabel = CreateLabel(viewRoot.transform, "WaitingPlayerStatus", new Vector3(0f, -145f, 0f), 940, 38,
-            "", 20, MutedTextColor, NGUIText.Alignment.Center);
+            "", 20, MutedTextColor, TextAnchor.MiddleCenter);
         CreateLabel(viewRoot.transform, "WaitingResultRule", new Vector3(0f, -220f, 0f), 940, 34,
-            "双方阵亡后统一结算 · 分数优先，同分比较生存时间", 17, MutedTextColor, NGUIText.Alignment.Center);
+            "双方阵亡后统一结算 · 分数优先，同分比较生存时间", 17, MutedTextColor, TextAnchor.MiddleCenter);
         RefreshDynamicText();
     }
 
@@ -499,19 +508,17 @@ public class NetworkBattleUI : MonoBehaviour
         HideSoloResults();
         Time.timeScale = 0f;
         CreateViewRoot("NetworkBattleResult", 90);
-        UI2DSprite scrim = CreateSprite(viewRoot.transform, "DisconnectScrim", Vector3.zero, 4000, 2400,
-            "Dark", new Color(1f, 1f, 1f, 0.84f), true);
-        CopySpriteStyle(scrim, scrimTemplate);
-        scrim.depth = -100;
+        CreateSprite(viewRoot.transform, "DisconnectScrim", Vector3.zero, 4000, 2400,
+            "Dark", new Color(0f, 0.015f, 0.03f, 0.78f), true);
         CreateSprite(viewRoot.transform, "DisconnectPanel", Vector3.zero, 1080, 580, "Dark", PanelColor, true);
         CreateLabel(viewRoot.transform, "DisconnectTitle", new Vector3(0f, 180f, 0f), 900, 64,
-            "联机连接已断开", 36, ErrorColor, NGUIText.Alignment.Center);
+            "联机连接已断开", 36, ErrorColor, TextAnchor.MiddleCenter);
         CreateLabel(viewRoot.transform, "DisconnectReason", new Vector3(0f, 20f, 0f), 900, 160,
-            session.LastError + "\n可直接重试，或返回主菜单重新设置。", 22, TextColor, NGUIText.Alignment.Center);
+            session.LastError + "\n可直接重试，或返回主菜单重新设置。", 22, TextColor, TextAnchor.MiddleCenter);
         CreateButton(viewRoot.transform, "DisconnectRetryButton", new Vector3(-185f, -180f, 0f), 320, 64,
-            "重新连接", AccentColor).onClick.Add(new EventDelegate(RetryLastConnection));
+            "重新连接", AccentColor).onClick.AddListener(RetryLastConnection);
         CreateButton(viewRoot.transform, "DisconnectMenuButton", new Vector3(185f, -180f, 0f), 320, 60,
-            "返回主菜单", MutedTextColor).onClick.Add(new EventDelegate(ReturnToMenu));
+            "返回主菜单", MutedTextColor).onClick.AddListener(ReturnToMenu);
     }
 
     private void BuildBattleResult()
@@ -528,20 +535,18 @@ public class NetworkBattleUI : MonoBehaviour
             ? "双方最终成绩完全相同"
             : (resultText.Contains("生存时间") ? "同分后按生存时间判定" : "按最终积分判定");
 
-        UI2DSprite scrim = CreateSprite(viewRoot.transform, "ResultScrim", Vector3.zero, 4000, 2400,
-            "Dark", new Color(1f, 1f, 1f, 0.84f), true);
-        CopySpriteStyle(scrim, scrimTemplate);
-        scrim.depth = -100;
+        CreateSprite(viewRoot.transform, "ResultScrim", Vector3.zero, 4000, 2400,
+            "Dark", new Color(0f, 0.015f, 0.03f, 0.78f), true);
         CreateSprite(viewRoot.transform, "ResultPanel", Vector3.zero, 1080, 720, "Dark", PanelColor, true);
         CreateSprite(viewRoot.transform, "ResultAccent", new Vector3(0f, 320f, 0f), 900, 5,
             "Bright", resultColor, false);
 
         CreateLabel(viewRoot.transform, "ResultEyebrow", new Vector3(0f, 275f, 0f), 900, 32,
-            "联机生存竞技 · 对局结算", 17, MutedTextColor, NGUIText.Alignment.Center);
+            "联机生存竞技 · 对局结算", 17, MutedTextColor, TextAnchor.MiddleCenter);
         CreateLabel(viewRoot.transform, "ResultTitle", new Vector3(0f, 215f, 0f), 900, 70,
-            resultTitle, 48, resultColor, NGUIText.Alignment.Center);
+            resultTitle, 48, resultColor, TextAnchor.MiddleCenter);
         CreateLabel(viewRoot.transform, "ResultReason", new Vector3(0f, 155f, 0f), 900, 34,
-            resultReason, 17, MutedTextColor, NGUIText.Alignment.Center);
+            resultReason, 17, MutedTextColor, TextAnchor.MiddleCenter);
         CreateSprite(viewRoot.transform, "ResultDivider", new Vector3(0f, 112f, 0f), 900, 2,
             "Bright", new Color(MutedTextColor.r, MutedTextColor.g, MutedTextColor.b, 0.42f), false);
         CreateSprite(viewRoot.transform, "ResultColumnDivider", new Vector3(0f, -15f, 0f), 2, 220,
@@ -557,195 +562,89 @@ public class NetworkBattleUI : MonoBehaviour
             remoteStatus, remoteColor, "Remote");
 
         CreateLabel(viewRoot.transform, "ResultRule", new Vector3(0f, -185f, 0f), 900, 30,
-            "分数优先 · 同分比较生存时间", 15, MutedTextColor, NGUIText.Alignment.Center);
+            "分数优先 · 同分比较生存时间", 15, MutedTextColor, TextAnchor.MiddleCenter);
         rematchStatusLabel = CreateLabel(viewRoot.transform, "RematchStatus", new Vector3(0f, -215f, 0f), 900, 30,
-            "可再次进行同一关卡", 15, MutedTextColor, NGUIText.Alignment.Center);
-        UIButton backButton = CreateButton(viewRoot.transform, "ResultBackButton", new Vector3(-190f, -290f, 0f),
+            "可再次进行同一关卡", 15, MutedTextColor, TextAnchor.MiddleCenter);
+        Button backButton = CreateButton(viewRoot.transform, "ResultBackButton", new Vector3(-190f, -290f, 0f),
             320, 60, "返回任务控制台", MutedTextColor);
-        backButton.onClick.Add(new EventDelegate(ReturnToMenu));
-        UIButton rematchButton = CreateButton(viewRoot.transform, "ResultRematchButton", new Vector3(190f, -290f, 0f),
+        backButton.onClick.AddListener(ReturnToMenu);
+        Button rematchButton = CreateButton(viewRoot.transform, "ResultRematchButton", new Vector3(190f, -290f, 0f),
             320, 64, "再来一局", AccentColor);
-        rematchButton.onClick.Add(new EventDelegate(RequestRematch));
+        rematchButton.onClick.AddListener(RequestRematch);
     }
 
     private void BuildResultColumn(float x, string role, string player, int score, float time,
         string status, Color statusColor, string namePrefix)
     {
         CreateLabel(viewRoot.transform, namePrefix + "ResultRole", new Vector3(x, 75f, 0f), 420, 28,
-            role, 15, MutedTextColor, NGUIText.Alignment.Center);
+            role, 15, MutedTextColor, TextAnchor.MiddleCenter);
         CreateLabel(viewRoot.transform, namePrefix + "ResultName", new Vector3(x, 38f, 0f), 420, 38,
-            string.IsNullOrEmpty(player) ? "Player" : player, 22, TextColor, NGUIText.Alignment.Center);
+            string.IsNullOrEmpty(player) ? "Player" : player, 22, TextColor, TextAnchor.MiddleCenter);
         CreateLabel(viewRoot.transform, namePrefix + "ResultScore", new Vector3(x, -20f, 0f), 420, 60,
-            score + " 分", 34, statusColor, NGUIText.Alignment.Center);
+            score + " 分", 34, statusColor, TextAnchor.MiddleCenter);
         CreateLabel(viewRoot.transform, namePrefix + "ResultTime", new Vector3(x, -75f, 0f), 420, 32,
-            "生存 " + FormatTime(time), 17, MutedTextColor, NGUIText.Alignment.Center);
+            "生存 " + FormatTime(time), 17, MutedTextColor, TextAnchor.MiddleCenter);
         CreateLabel(viewRoot.transform, namePrefix + "ResultStatus", new Vector3(x, -125f, 0f), 420, 36,
-            status, 20, statusColor, NGUIText.Alignment.Center);
+            status, 20, statusColor, TextAnchor.MiddleCenter);
     }
 
-    private UI2DSprite CreateSprite(Transform parent, string name, Vector3 position, int width, int height, string spriteName, Color color, bool addCollider)
+    private Image CreateSprite(Transform parent, string name, Vector3 position, int width, int height,
+        string spriteName, Color color, bool raycastTarget)
     {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        go.transform.localPosition = position;
-        go.layer = parent.gameObject.layer;
-
-        UI2DSprite sprite = go.AddComponent<UI2DSprite>();
-        CopySpriteStyle(sprite, spriteName == "Bright" ? accentTemplate : panelTemplate);
-        sprite.type = UIBasicSprite.Type.Sliced;
-        sprite.width = width;
-        sprite.height = height;
-        sprite.color = spriteName == "Bright" ? color : new Color(1f, 1f, 1f, color.a);
-        sprite.depth = spriteName == "Bright" ? -10 : -50;
-
-        if (addCollider)
-        {
-            BoxCollider collider = go.AddComponent<BoxCollider>();
-            collider.size = new Vector3(width, height, 0.1f);
-        }
-        return sprite;
+        Image template = spriteName == "Bright" ? accentTemplate :
+            (name.IndexOf("Scrim", StringComparison.OrdinalIgnoreCase) >= 0 ? scrimTemplate : panelTemplate);
+        return UGUIRuntime.CreateImage(parent, name, position, width, height,
+            template, null, color, raycastTarget);
     }
 
-    private static void CopySpriteStyle(UI2DSprite sprite, UI2DSprite source)
+    private Text CreateLabel(Transform parent, string name, Vector3 position, int width, int height, string text,
+        int fontSize, Color color, TextAnchor alignment)
     {
-        if (source == null)
-            return;
-        sprite.sprite2D = source.sprite2D;
-        sprite.shader = source.shader;
-        sprite.border = source.border;
+        return UGUIRuntime.CreateText(parent, name, position, width, height,
+            text, fontSize, color, alignment, templateLabel);
     }
 
-    private UILabel CreateLabel(Transform parent, string name, Vector3 position, int width, int height, string text,
-        int fontSize, Color color, NGUIText.Alignment alignment)
-    {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        go.transform.localPosition = position;
-        go.layer = parent.gameObject.layer;
-
-        UILabel label = go.AddComponent<UILabel>();
-        if (templateLabel != null)
-        {
-            label.font = templateLabel.font;
-            label.trueTypeFont = templateLabel.trueTypeFont;
-            label.spacingX = templateLabel.spacingX;
-            label.spacingY = templateLabel.spacingY;
-            label.fontStyle = templateLabel.fontStyle;
-            label.effectStyle = templateLabel.effectStyle;
-            label.effectColor = templateLabel.effectColor;
-            label.effectDistance = templateLabel.effectDistance;
-        }
-        label.text = text;
-        label.width = width;
-        label.height = height;
-        label.fontSize = fontSize;
-        label.depth = 40;
-        label.alignment = alignment;
-        label.overflowMethod = UILabel.Overflow.ShrinkContent;
-        label.color = color;
-        return label;
-    }
-
-    private UIInput CreateInput(Transform parent, string name, Vector3 position, int width, int height,
+    private InputField CreateInput(Transform parent, string name, Vector3 position, int width, int height,
         string hint, string initialValue, int limit)
     {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        go.transform.localPosition = position;
-        go.layer = parent.gameObject.layer;
-
-        UI2DSprite background = go.AddComponent<UI2DSprite>();
-        CopySpriteStyle(background, inputTemplate);
-        background.type = UIBasicSprite.Type.Sliced;
-        background.width = width;
-        background.height = height;
-        background.color = Color.white;
-        background.depth = 10;
-
         CreateLabel(parent, name + "Caption", position + new Vector3(-width * 0.5f - 130f, 0f, 0f),
-            200, height, hint, 20, MutedTextColor, NGUIText.Alignment.Right);
-
-        BoxCollider collider = go.AddComponent<BoxCollider>();
-        collider.size = new Vector3(width, height, 0.1f);
-
-        GameObject labelObject = new GameObject(name + "Label");
-        labelObject.transform.SetParent(go.transform, false);
-        labelObject.layer = go.layer;
-        UILabel textLabel = labelObject.AddComponent<UILabel>();
-        if (templateLabel != null)
-        {
-            textLabel.font = templateLabel.font;
-            textLabel.trueTypeFont = templateLabel.trueTypeFont;
-        }
-        textLabel.width = width - 52;
-        textLabel.height = height - 8;
-        textLabel.fontSize = 20;
-        textLabel.pivot = UIWidget.Pivot.Left;
-        // NGUI moves a widget when its pivot changes. Position it after setting the pivot.
-        labelObject.transform.localPosition = new Vector3(-width * 0.5f + 26f, 0f, -1f);
-        textLabel.depth = 20;
-        textLabel.alignment = NGUIText.Alignment.Left;
-        textLabel.overflowMethod = UILabel.Overflow.ShrinkContent;
-        textLabel.color = TextColor;
-
-        UIInput input = go.AddComponent<UIInput>();
-        input.label = textLabel;
-        input.characterLimit = limit;
-        input.defaultText = hint;
-        input.defaultColor = MutedTextColor;
-        input.activeTextColor = TextColor;
-        input.selectAllTextOnFocus = true;
-        input.value = initialValue;
+            200, height, hint, 20, MutedTextColor, TextAnchor.MiddleRight);
+        InputField input = UGUIRuntime.CreateInput(parent, name, position, width, height,
+            hint, initialValue, limit, inputTemplate, templateLabel);
+        input.textComponent.color = TextColor;
         return input;
     }
 
-    private UIButton CreateButton(Transform parent, string name, Vector3 position, int width, int height,
+    private Button CreateButton(Transform parent, string name, Vector3 position, int width, int height,
         string text, Color textColor)
     {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        go.transform.localPosition = position;
-        go.layer = parent.gameObject.layer;
+        return UGUIRuntime.CreateButton(parent, name, position, width, height,
+            text, textColor, buttonTemplate, templateLabel);
+    }
 
-        UI2DSprite sprite = go.AddComponent<UI2DSprite>();
-        if (buttonTemplate != null)
+    private static void ApplySelectionStyle(Button button, bool selected)
+    {
+        if (button == null || button.targetGraphic == null)
+            return;
+
+        UGUIButtonChrome chrome = button.targetGraphic as UGUIButtonChrome;
+        if (chrome != null)
         {
-            CopySpriteStyle(sprite, buttonTemplate);
+            chrome.SetRole(selected ? UGUIChromeRole.Selected : UGUIChromeRole.Secondary);
+            button.targetGraphic.CrossFadeColor(Color.white, 0f, true, true);
+            return;
         }
-        else
-        {
-            sprite.sprite2D = FindLoadedSprite("ui_button_primary", "ui_button_secondary", "ui_button_choose");
-        }
-        if (sprite.sprite2D == null && GameOverPanel.Instance != null && GameOverPanel.Instance.btnRestart != null)
-        {
-            UI2DSprite sceneButton = GameOverPanel.Instance.btnRestart.GetComponent<UI2DSprite>();
-            if (sceneButton != null)
-                CopySpriteStyle(sprite, sceneButton);
-        }
-        if (sprite.sprite2D == null)
-            sprite.sprite2D = FindLoadedSprite("ui_button_primary", "ui_button_secondary", "ui_button_choose");
-        if (sprite.sprite2D == null && inputTemplate != null)
-            CopySpriteStyle(sprite, inputTemplate);
-        if (sprite.sprite2D == null && panelTemplate != null)
-            CopySpriteStyle(sprite, panelTemplate);
-        sprite.type = UIBasicSprite.Type.Sliced;
-        sprite.width = width;
-        sprite.height = height;
-        sprite.color = Color.white;
-        sprite.depth = 20;
 
-        BoxCollider collider = go.AddComponent<BoxCollider>();
-        collider.size = new Vector3(width, height, 0.1f);
-
-        UIButton button = go.AddComponent<UIButton>();
-        button.tweenTarget = go;
-        button.hover = new Color(0.78f, 1f, 1f, 1f);
-        button.pressed = new Color(0.72f, 0.86f, 0.9f, 1f);
-        button.pixelSnap = true;
-
-        UILabel label = CreateLabel(go.transform, name + "Label", new Vector3(0f, 0f, -1f), width - 20, height - 10,
-            text, 22, textColor, NGUIText.Alignment.Center);
-        return button;
+        Color normal = selected
+            ? new Color(0.10f, 0.52f, 0.62f, 1f)
+            : new Color(0.12f, 0.25f, 0.31f, 1f);
+        ColorBlock colors = button.colors;
+        colors.normalColor = normal;
+        colors.selectedColor = new Color(0.16f, 0.78f, 0.86f, 1f);
+        colors.highlightedColor = new Color(0.12f, 0.62f, 0.72f, 1f);
+        colors.pressedColor = new Color(0.06f, 0.38f, 0.46f, 1f);
+        button.colors = colors;
+        button.targetGraphic.CrossFadeColor(normal, 0f, true, true);
     }
 
     private static Sprite FindLoadedSprite(params string[] preferredNames)
@@ -782,15 +681,15 @@ public class NetworkBattleUI : MonoBehaviour
             session.State == NetworkBattleSession.BattleState.Connecting;
         if (hostConnectButton != null)
         {
-            hostConnectButton.isEnabled = !connectionBusy;
-            UILabel label = hostConnectButton.GetComponentInChildren<UILabel>();
+            hostConnectButton.interactable = !connectionBusy;
+            Text label = hostConnectButton.GetComponentInChildren<Text>();
             if (label != null)
                 label.text = connectionBusy && lastAttemptHost ? "处理中…" : "创建房间";
         }
         if (joinConnectButton != null)
         {
-            joinConnectButton.isEnabled = !connectionBusy;
-            UILabel label = joinConnectButton.GetComponentInChildren<UILabel>();
+            joinConnectButton.interactable = !connectionBusy;
+            Text label = joinConnectButton.GetComponentInChildren<Text>();
             if (label != null)
                 label.text = connectionBusy && !lastAttemptHost ? "处理中…" : "加入房间";
         }
@@ -798,8 +697,8 @@ public class NetworkBattleUI : MonoBehaviour
         if (lobbyReadyButton != null)
         {
             bool peerJoined = !string.IsNullOrEmpty(session.RemotePlayerName);
-            lobbyReadyButton.isEnabled = peerJoined && !session.LocalReady;
-            lobbyReadyButton.GetComponentInChildren<UILabel>().text = !peerJoined ? "等待对手加入" :
+            lobbyReadyButton.interactable = peerJoined && !session.LocalReady;
+            lobbyReadyButton.GetComponentInChildren<Text>().text = !peerJoined ? "等待对手加入" :
                 (session.LocalReady ? "已准备，等待对手" : "准备选角");
         }
 
@@ -868,6 +767,7 @@ public class NetworkBattleUI : MonoBehaviour
     private void OpenLobby()
     {
         showLobby = true;
+        RebuildView(SceneManager.GetActiveScene().name, session.State);
     }
 
     private void CloseLobby()

@@ -1,214 +1,103 @@
-using System.Collections.Generic;
+using System.Collections;
 using NUnit.Framework;
-using UnityEditor;
 using UnityEditor.SceneManagement;
+using UnityEditor.TestTools;
 using UnityEngine;
-using UnityEngine.SceneManagement;
+using UnityEngine.TestTools;
+using UnityEngine.UI;
 
 public class EntryUIPolishTests
 {
-    private const string BeginScenePath = "Assets/Scenes/BeginScene.unity";
-    private const string PrimaryButtonPath = "Assets/ArtRes/UI/Polished/ui_button_primary.png";
-    private const string SecondaryButtonPath = "Assets/ArtRes/UI/Polished/ui_button_secondary.png";
-    private const string DangerButtonPath = "Assets/ArtRes/UI/Polished/ui_button_danger.png";
-
     [Test]
-    public void SavedEntrySceneUsesPolishedMainMenuWithoutChangingBindings()
+    public void EntrySceneUsesResponsiveNativeCanvas()
     {
-        Scene scene = EditorSceneManager.OpenScene(BeginScenePath, OpenSceneMode.Single);
-        GameObject menuObject = FindSceneObject(scene, "BeginPanel");
-        BeginPanel menu = menuObject.GetComponent<BeginPanel>();
-
-        Assert.IsNotNull(menu);
-        Assert.IsTrue(menuObject.activeSelf);
-        Assert.AreEqual("btnBegin", menu.btnBegin.name);
-        Assert.AreEqual("btnRank", menu.btnRank.name);
-        Assert.AreEqual("btnSet", menu.btnSetting.name);
-        Assert.AreEqual("btnQuit", menu.btnQuit.name);
-
-        AssertButton(menuObject.transform, menu.btnBegin, "开始任务", new Vector2(625f, 190f), PrimaryButtonPath);
-        AssertButton(menuObject.transform, menu.btnRank, "排行榜", new Vector2(625f, 78f), SecondaryButtonPath);
-        AssertButton(menuObject.transform, menu.btnSetting, "音频设置", new Vector2(625f, -34f), SecondaryButtonPath);
-        AssertButton(menuObject.transform, menu.btnQuit, "退出游戏", new Vector2(625f, -146f), DangerButtonPath);
-
-        AssertLabel(menuObject.transform, "labTitle", "星际突围");
-        AssertLabel(menuObject.transform, "Polish_Subtitle", "深空防线");
-        AssertLabel(menuObject.transform, "Polish_Mission", "守住航线，突破弹幕封锁");
-        AssertLabel(menuObject.transform, "Polish_MenuHeader", "任务控制台");
-        AssertLabel(menuObject.transform, "Polish_Status", "SYSTEM READY");
-
-        AssertSingleDirectChild(menuObject.transform, "Polish_Scrim");
-        AssertSingleDirectChild(menuObject.transform, "Polish_MenuPanel");
-        AssertSingleDirectChild(menuObject.transform, "Polish_TitleAccent");
-        AssertSingleDirectChild(menuObject.transform, "Polish_MenuAccent");
-        AssertSingleDirectChild(menuObject.transform, "Polish_FooterLine");
-        AssertSingleDirectChild(menuObject.transform, "Polish_StatusMark");
+        EditorSceneManager.OpenScene("Assets/Scenes/BeginScene.unity", OpenSceneMode.Single);
+        Canvas canvas = UGUIRuntime.Canvas;
+        CanvasScaler scaler = canvas.GetComponent<CanvasScaler>();
+        Assert.IsNotNull(canvas.GetComponent<GraphicRaycaster>());
+        Assert.AreEqual(new Vector2(1920f, 1080f), scaler.referenceResolution);
+        Assert.AreEqual(CanvasScaler.ScreenMatchMode.Expand, scaler.screenMatchMode);
     }
 
     [Test]
-    public void EntrySceneKeepsAllNguiPanelsAndRuntimeControllers()
+    public void EntryButtonsHaveNativeLabelsAndStableRects()
     {
-        Scene scene = EditorSceneManager.OpenScene(BeginScenePath, OpenSceneMode.Single);
-        UIRoot[] roots = FindSceneComponents<UIRoot>(scene);
-
-        Assert.AreEqual(1, roots.Length);
-        Assert.AreEqual(UIRoot.Scaling.Constrained, roots[0].scalingStyle);
-        Assert.AreEqual(NGUIAspectSafeLayout.DefaultWidth, roots[0].manualWidth);
-        Assert.AreEqual(NGUIAspectSafeLayout.DefaultHeight, roots[0].manualHeight);
-        Assert.IsNotNull(roots[0].GetComponent<NGUIAspectSafeLayout>());
-
-        AssertPanelController<BeginPanel>(scene, "BeginPanel");
-        AssertPanelController<ChoosePanel>(scene, "ChoosePanel");
-        AssertPanelController<DifficultyPanel>(scene, "DifficultyPanel");
-        AssertPanelController<RankPanel>(scene, "RankPanel");
-        AssertPanelController<SettingPanel>(scene, "SetingPanel");
+        EditorSceneManager.OpenScene("Assets/Scenes/BeginScene.unity", OpenSceneMode.Single);
+        BeginPanel panel = Object.FindObjectOfType<BeginPanel>(true);
+        Button[] buttons = { panel.btnBegin, panel.btnRank, panel.btnSetting, panel.btnQuit };
+        foreach (Button button in buttons)
+        {
+            Assert.IsNotNull(button);
+            Assert.IsNotNull(UGUIRuntime.Label(button));
+            Assert.Greater(button.GetComponent<RectTransform>().rect.width, 0f);
+        }
     }
 
     [Test]
-    public void SafeAreaIsClampedAndConvertedToCameraViewport()
+    public void AudioSettingsButtonHasExplicitAudioIcon()
     {
-        Rect viewport = NGUIAspectSafeLayout.Viewport(
-            2400, 1080, new Rect(120f, 24f, 2160f, 1032f));
-        Assert.That(viewport.x, Is.EqualTo(0.05f).Within(0.0001f));
-        Assert.That(viewport.y, Is.EqualTo(24f / 1080f).Within(0.0001f));
-        Assert.That(viewport.width, Is.EqualTo(0.9f).Within(0.0001f));
-        Assert.That(viewport.height, Is.EqualTo(1032f / 1080f).Within(0.0001f));
+        EditorSceneManager.OpenScene("Assets/Scenes/BeginScene.unity", OpenSceneMode.Single);
+        BeginPanel panel = Object.FindObjectOfType<BeginPanel>(true);
+        Assert.AreEqual(UGUIChromeIcon.Audio, UGUIVisualSystem.ResolveIcon(panel.btnSetting));
+    }
 
-        Rect clamped = NGUIAspectSafeLayout.ClampSafeArea(
-            2400, 1080, new Rect(-100f, -50f, 2700f, 1200f));
-        Assert.AreEqual(new Rect(0f, 0f, 2400f, 1080f), clamped);
-
-        Rect emptyFallback = NGUIAspectSafeLayout.ClampSafeArea(
-            2400, 1080, new Rect(100f, 100f, 0f, 500f));
-        Assert.AreEqual(new Rect(0f, 0f, 2400f, 1080f), emptyFallback);
-
-        Rect invalidFallback = NGUIAspectSafeLayout.ClampSafeArea(
-            2400, 1080, new Rect(float.NaN, 0f, 100f, 100f));
-        Assert.AreEqual(new Rect(0f, 0f, 2400f, 1080f), invalidFallback);
+    [TestCase("Assets/Scenes/BeginScene.unity")]
+    [TestCase("Assets/Scenes/GameScene.unity")]
+    public void ProductionCanvasHasGlobalSafeAspectLayout(string scenePath)
+    {
+        EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+        Canvas canvas = UGUIRuntime.Canvas;
+        UGUIAspectSafeLayout layout = canvas.GetComponent<UGUIAspectSafeLayout>();
+        Assert.IsNotNull(layout);
+        Assert.IsTrue(layout.UseSafeArea);
+        Assert.AreEqual(UGUIAspectSafeLayout.DefaultWidth, layout.RefWidth);
+        Assert.AreEqual(UGUIAspectSafeLayout.DefaultHeight, layout.RefHeight);
     }
 
     [Test]
-    public void PerspectiveCameraFitsTheViewportAspectIndependentlyFromRootScale()
+    public void SafeLayoutMathFitsNarrowAndWideDisplays()
     {
-        const float refFov = 60f;
-        const float narrowAspect = 4f / 3f;
-
-        float narrowFieldOfView = NGUIAspectSafeLayout.VerticalFov(
-            refFov, 1920f / 1080f, narrowAspect);
-        Assert.Greater(narrowFieldOfView, refFov);
-
-        float wideFieldOfView = NGUIAspectSafeLayout.VerticalFov(
-            refFov, 1920f / 1080f, 21f / 9f);
-        Assert.That(wideFieldOfView, Is.EqualTo(refFov).Within(0.0001f));
+        Assert.AreEqual(1440, UGUIAspectSafeLayout.FitHeight(1920, 1080, 4f / 3f));
+        Assert.AreEqual(1080, UGUIAspectSafeLayout.FitHeight(1920, 1080, 21f / 9f));
+        Assert.Greater(UGUIAspectSafeLayout.VerticalFov(60f, 16f / 9f, 4f / 3f), 60f);
+        Assert.AreEqual(1f, UGUIAspectSafeLayout.SafeContentScale(2560, 1080,
+            new Rect(0f, 0f, 2560f, 1080f)), 0.0001f);
+        Assert.AreEqual(new Vector2(1920f, 1440f),
+            UGUIAspectSafeLayout.ExpandedCanvasSize(1200, 900, 1920, 1080));
+        Assert.AreEqual(new Vector2(2520f, 1080f),
+            UGUIAspectSafeLayout.ExpandedCanvasSize(2100, 900, 1920, 1080));
+        Assert.Less(UGUIAspectSafeLayout.SafeContentScale(1920, 1080,
+            new Rect(0f, 80f, 1920f, 1000f)), 1f);
+        Assert.AreEqual(new Vector2(-50f, 0f), UGUIAspectSafeLayout.SafeContentOffset(
+            1920, 1080, new Rect(0f, 0f, 1820f, 1080f)));
     }
 
-    private static void AssertButton(Transform panel, UIButton button, string text, Vector2 expectedPosition,
-        string expectedSpritePath)
+    [UnityTest]
+    public IEnumerator RuntimeMovesEverySceneViewUnderAdaptiveRoot()
     {
-        Assert.IsNotNull(button);
-        Assert.AreSame(panel, FindPanelRoot(button.transform));
-        Assert.That(button.transform.localPosition.x, Is.EqualTo(expectedPosition.x).Within(0.01f));
-        Assert.That(button.transform.localPosition.y, Is.EqualTo(expectedPosition.y).Within(0.01f));
+        EditorSceneManager.OpenScene("Assets/Scenes/BeginScene.unity", OpenSceneMode.Single);
+        yield return new EnterPlayMode();
+        yield return null;
 
-        BoxCollider collider = button.GetComponent<BoxCollider>();
-        Assert.IsNotNull(collider);
-        Assert.IsTrue(collider.enabled);
-        Assert.That(collider.size.x, Is.GreaterThanOrEqualTo(360f));
-        Assert.That(collider.size.y, Is.GreaterThanOrEqualTo(82f));
+        Canvas canvas = UGUIRuntime.Canvas;
+        UGUIAspectSafeLayout layout = canvas.GetComponent<UGUIAspectSafeLayout>();
+        RectTransform root = layout.ContentRoot;
+        Assert.IsNotNull(root);
+        Assert.AreEqual("UGUI_AdaptiveRoot", root.name);
+        Assert.AreEqual(1, canvas.transform.childCount,
+            "Every static and runtime-created UI view must share the adaptive root.");
+        Assert.AreSame(root, canvas.transform.GetChild(0));
+        Assert.IsTrue(UGUIRuntime.View(BeginPanel.Instance).IsChildOf(root));
+        RectTransform beginView = UGUIRuntime.View(BeginPanel.Instance) as RectTransform;
+        Assert.AreEqual(Vector2.zero, beginView.anchorMin);
+        Assert.AreEqual(Vector2.one, beginView.anchorMax);
+        Assert.AreEqual(Vector2.zero, beginView.sizeDelta);
+        RectTransform scrim = beginView.Find("Polish_Scrim") as RectTransform;
+        Assert.IsNotNull(scrim);
+        Assert.AreEqual(Vector2.zero, scrim.anchorMin);
+        Assert.AreEqual(Vector2.one, scrim.anchorMax);
+        Assert.AreEqual(Vector2.zero, scrim.sizeDelta);
 
-        Assert.IsNull(FindDirectChild(button.transform, "Polish_ButtonVisual"));
-        UI2DSprite visual = button.GetComponent<UI2DSprite>();
-        Assert.IsNotNull(visual);
-        Assert.IsTrue(visual.enabled);
-        Assert.AreSame(visual.gameObject, button.tweenTarget);
-        Assert.AreEqual(expectedSpritePath, AssetDatabase.GetAssetPath(visual.sprite2D));
-
-        UILabel[] labels = button.GetComponentsInChildren<UILabel>(true);
-        List<UILabel> enabledLabels = new List<UILabel>();
-        for (int i = 0; i < labels.Length; i++)
-        {
-            if (labels[i].enabled && labels[i].gameObject.activeSelf)
-                enabledLabels.Add(labels[i]);
-        }
-        Assert.AreEqual(1, enabledLabels.Count);
-        Assert.AreEqual(text, enabledLabels[0].text);
-    }
-
-    private static void AssertLabel(Transform root, string name, string expectedText)
-    {
-        Transform child = FindChild(root, name);
-        Assert.IsNotNull(child, name + " is missing.");
-        UILabel label = child.GetComponent<UILabel>();
-        Assert.IsNotNull(label, name + " has no UILabel.");
-        Assert.AreEqual(expectedText, label.text);
-    }
-
-    private static void AssertSingleDirectChild(Transform root, string name)
-    {
-        int count = 0;
-        for (int i = 0; i < root.childCount; i++)
-        {
-            if (root.GetChild(i).name == name)
-                count++;
-        }
-        Assert.AreEqual(1, count, name + " must exist exactly once under BeginPanel.");
-    }
-
-    private static void AssertPanelController<T>(Scene scene, string name) where T : Component
-    {
-        GameObject panel = FindSceneObject(scene, name);
-        Assert.IsNotNull(panel.GetComponent<UIPanel>(), name + " has no UIPanel.");
-        Assert.IsNotNull(panel.GetComponent<T>(), name + " has no " + typeof(T).Name + ".");
-    }
-
-    private static Transform FindPanelRoot(Transform child)
-    {
-        Transform current = child;
-        while (current != null && !current.name.EndsWith("Panel", System.StringComparison.Ordinal))
-            current = current.parent;
-        return current;
-    }
-
-    private static Transform FindDirectChild(Transform root, string name)
-    {
-        for (int i = 0; i < root.childCount; i++)
-        {
-            if (root.GetChild(i).name == name)
-                return root.GetChild(i);
-        }
-        return null;
-    }
-
-    private static Transform FindChild(Transform root, string name)
-    {
-        Transform[] children = root.GetComponentsInChildren<Transform>(true);
-        for (int i = 0; i < children.Length; i++)
-        {
-            if (children[i].name == name)
-                return children[i];
-        }
-        return null;
-    }
-
-    private static GameObject FindSceneObject(Scene scene, string name)
-    {
-        GameObject[] roots = scene.GetRootGameObjects();
-        for (int i = 0; i < roots.Length; i++)
-        {
-            Transform child = FindChild(roots[i].transform, name);
-            if (child != null)
-                return child.gameObject;
-        }
-        Assert.Fail(name + " was not found in " + scene.path + ".");
-        return null;
-    }
-
-    private static T[] FindSceneComponents<T>(Scene scene) where T : Component
-    {
-        List<T> components = new List<T>();
-        GameObject[] roots = scene.GetRootGameObjects();
-        for (int i = 0; i < roots.Length; i++)
-            components.AddRange(roots[i].GetComponentsInChildren<T>(true));
-        return components.ToArray();
+        yield return new ExitPlayMode();
     }
 }

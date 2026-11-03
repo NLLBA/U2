@@ -1,14 +1,17 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class DifficultySelectButton : MonoBehaviour
 {
     public int difficultyId = 2;
     public string difficultyName = "普通";
-    public UILabel statusLabel;
+    public Text statusLabel;
 
-    private void OnClick()
+    private Button button;
+
+    private void SelectDifficulty()
     {
         GameDataMgr.Instance.SetDifficulty(difficultyId);
         RefreshStatus();
@@ -17,6 +20,10 @@ public class DifficultySelectButton : MonoBehaviour
 
     private void Start()
     {
+        Transform view = UGUIRuntime.View(this);
+        button = view != null ? view.GetComponentInChildren<Button>(true) : null;
+        if (button != null)
+            button.onClick.AddListener(SelectDifficulty);
         RefreshStatus();
     }
 

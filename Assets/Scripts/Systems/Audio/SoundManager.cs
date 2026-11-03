@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 public enum SoundCue
 {
@@ -100,10 +101,10 @@ public class SoundManager : MonoBehaviour
     {
         yield return null;
 
-        UIButton[] buttons = Resources.FindObjectsOfTypeAll<UIButton>();
+        Button[] buttons = Resources.FindObjectsOfTypeAll<Button>();
         for (int i = 0; i < buttons.Length; i++)
         {
-            UIButton button = buttons[i];
+            Button button = buttons[i];
             if (button == null || !button.gameObject.scene.IsValid())
                 continue;
 
@@ -111,7 +112,7 @@ public class SoundManager : MonoBehaviour
             if (!buttonIds.Add(id))
                 continue;
 
-            button.onClick.Add(new EventDelegate(PlayUiClick));
+            button.onClick.AddListener(PlayUiClick);
         }
     }
 

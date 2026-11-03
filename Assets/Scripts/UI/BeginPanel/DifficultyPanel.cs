@@ -3,19 +3,23 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 public class DifficultyPanel : BasePanel<DifficultyPanel>
 {
-    public UIButton btnEasy;
-    public UIButton btnNormal;
-    public UIButton btnHard;
-    public UIButton btnStart;
-    public UIButton btnClose;
-    public UILabel labTitle;
-    public UILabel labSelected;
-    public UILabel labDetail;
+    public Button btnEasy;
+    public Button btnNormal;
+    public Button btnHard;
+    public Button btnStart;
+    public Button btnClose;
+    public Text labTitle;
+    public Text labSelected;
+    public Text labDetail;
 
     private static readonly Color SelectedTint = new Color(0.55f, 0.95f, 1f, 1f);
+    private static readonly Color EasyTint = new Color(0.25f, 0.92f, 0.62f, 1f);
+    private static readonly Color NormalTint = new Color(0.24f, 0.72f, 1f, 1f);
+    private static readonly Color HardTint = new Color(1f, 0.55f, 0.20f, 1f);
 
     private Color easyColor;
     private Color normalColor;
@@ -30,43 +34,43 @@ public class DifficultyPanel : BasePanel<DifficultyPanel>
 
         if (btnEasy != null)
         {
-            btnEasy.onClick.Add(new EventDelegate(() =>
+            btnEasy.onClick.AddListener(() =>
             {
                 Select(1);
-            }));
+            });
         }
 
         if (btnNormal != null)
         {
-            btnNormal.onClick.Add(new EventDelegate(() =>
+            btnNormal.onClick.AddListener(() =>
             {
                 Select(2);
-            }));
+            });
         }
 
         if (btnHard != null)
         {
-            btnHard.onClick.Add(new EventDelegate(() =>
+            btnHard.onClick.AddListener(() =>
             {
                 Select(3);
-            }));
+            });
         }
 
         if (btnStart != null)
         {
-            btnStart.onClick.Add(new EventDelegate(StartGame));
+            btnStart.onClick.AddListener(StartGame);
         }
 
         if (btnClose != null)
         {
-            btnClose.onClick.Add(new EventDelegate(() =>
+            btnClose.onClick.AddListener(() =>
             {
                 Hideme();
                 if (ChoosePanel.Instance != null)
                 {
                     ChoosePanel.Instance.ShowCurrent();
                 }
-            }));
+            });
         }
 
         Hideme();
@@ -116,19 +120,21 @@ public class DifficultyPanel : BasePanel<DifficultyPanel>
             string attackStyle = selected.id == 1 ? "单一招式 · 高亮预警" :
                 (selected.id == 3 ? "假预警 · 反向横扫 · 双核心" : "中后段叠加组合攻击");
             labSelected.text = "当前选择：" + selected.name + " · " + attackStyle;
+            labSelected.color = selected.id == 1 ? EasyTint : (selected.id == 3 ? HardTint : NormalTint);
         }
 
         if (labDetail != null)
         {
             labDetail.text = DetailText(selected);
-            labDetail.maxLineCount = 3;
-            labDetail.height = 88;
-            labDetail.overflowMethod = UILabel.Overflow.ShrinkContent;
+            UGUIRuntime.SetSize(labDetail, labDetail.rectTransform.rect.width, 88f);
+            labDetail.resizeTextForBestFit = true;
+            labDetail.resizeTextMinSize = 11;
+            labDetail.resizeTextMaxSize = labDetail.fontSize;
         }
 
-        SetButton(btnEasy, easyColor, selected.id == 1);
-        SetButton(btnNormal, normalColor, selected.id == 2);
-        SetButton(btnHard, hardColor, selected.id == 3);
+        SetButton(btnEasy, easyColor, selected.id == 1, UGUIChromeRole.Easy, EasyTint);
+        SetButton(btnNormal, normalColor, selected.id == 2, UGUIChromeRole.Normal, NormalTint);
+        SetButton(btnHard, hardColor, selected.id == 3, UGUIChromeRole.Hard, HardTint);
     }
 
     private void CacheColors()
@@ -144,40 +150,42 @@ public class DifficultyPanel : BasePanel<DifficultyPanel>
         hasColors = true;
     }
 
-    private static Color GetButtonColor(UIButton button)
+    private static Color GetButtonColor(Button button)
     {
-        UIWidget widget = GetButtonWidget(button);
-        return widget != null ? widget.color : Color.white;
+        return button != null ? button.colors.normalColor : Color.white;
     }
 
-    private static void SetButton(UIButton button, Color defaultColor, bool selected)
+    private static void SetButton(Button button, Color defaultColor, bool selected,
+        UGUIChromeRole role, Color accent)
     {
         if (button == null)
         {
             return;
         }
 
-        Color color = selected ? Color.Lerp(defaultColor, SelectedTint, 0.7f) : defaultColor;
-        button.defaultColor = color;
-
-        UIWidget widget = GetButtonWidget(button);
-        if (widget != null)
+        UGUIButtonChrome chrome = button.targetGraphic as UGUIButtonChrome;
+        if (chrome != null)
         {
-            widget.color = color;
+            chrome.SetRole(role);
+            chrome.SetEmphasis(selected);
+            chrome.color = Color.white;
+            ColorBlock chromeColors = button.colors;
+            chromeColors.normalColor = Color.white;
+            chromeColors.selectedColor = Color.white;
+            button.colors = chromeColors;
+            Text label = UGUIRuntime.Label(button);
+            if (label != null)
+                label.color = selected ? Color.white : Color.Lerp(Color.white, accent, 0.32f);
+            return;
         }
 
-        button.SetState(UIButtonColor.State.Normal, true);
-    }
-
-    private static UIWidget GetButtonWidget(UIButton button)
-    {
-        if (button == null)
-        {
-            return null;
-        }
-
-        GameObject target = button.tweenTarget != null ? button.tweenTarget : button.gameObject;
-        return target.GetComponent<UIWidget>();
+        Color color = selected ? Color.Lerp(defaultColor, accent, 0.72f) : Color.Lerp(defaultColor, accent, 0.28f);
+        ColorBlock colors = button.colors;
+        colors.normalColor = color;
+        colors.selectedColor = color;
+        button.colors = colors;
+        if (button.targetGraphic != null)
+            button.targetGraphic.color = color;
     }
 
     private static string DetailText(DifficultyInfo info)

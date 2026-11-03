@@ -209,6 +209,11 @@ public class GameDataMgr
         audioSettingsService.Save(musicData);
     }
 
+    private static bool UpgradeMusicSettings(MusicData settings, bool hadSavedSettings)
+    {
+        return new AudioSettingsService().Upgrade(settings, hadSavedSettings);
+    }
+
     public void SetMusic(bool isOpen)
     {
         audioSettingsService.SetMusic(musicData, isOpen);

@@ -1,16 +1,17 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 public class CampaignLevelSelectUI : MonoBehaviour
 {
     private static CampaignLevelSelectUI instance;
 
     private GameObject viewRoot;
-    private UI2DSprite panelTemplate;
-    private UI2DSprite scrimTemplate;
-    private UI2DSprite buttonTemplate;
-    private UI2DSprite accentTemplate;
-    private UILabel labelTemplate;
+    private Image panelTemplate;
+    private Image scrimTemplate;
+    private Button buttonTemplate;
+    private Image accentTemplate;
+    private Text labelTemplate;
     private int selectedLevelId = 1;
     private bool selectedEndless;
     private bool selectedTraining;
@@ -94,40 +95,43 @@ public class CampaignLevelSelectUI : MonoBehaviour
         if (parent == null)
             return;
 
-        viewRoot = new GameObject("CampaignLevelSelect");
-        viewRoot.transform.SetParent(parent, false);
-        viewRoot.layer = parent.gameObject.layer;
-        viewRoot.AddComponent<UIPanel>().depth = 85;
+        UGUIRuntime.EnsureEventSystem();
+        viewRoot = UGUIRuntime.CreateRect(parent, "CampaignLevelSelect", Vector3.zero, 1920, 1080).gameObject;
+        viewRoot.SetActive(false);
         CacheTemplates(parent);
 
-        UI2DSprite scrim = CreateSprite("LevelSelectScrim", Vector3.zero, 4000, 2400, scrimTemplate,
-            new Color(1f, 1f, 1f, 0.78f), true, -100);
-        CreateSprite("LevelSelectPanel", Vector3.zero, 1320, 820, panelTemplate, Color.white, true, -50);
+        CreateSprite("LevelSelectScrim", Vector3.zero, 4000, 2400, scrimTemplate,
+            new Color(0f, 0.015f, 0.03f, 0.50f), true);
+        CreateSprite("LevelSelectPanel", Vector3.zero, 1420, 820, panelTemplate,
+            new Color(0.03f, 0.075f, 0.115f, 0.98f), true);
         CreateSprite("LevelSelectAccent", new Vector3(0f, 350f, 0f), 1140, 4, accentTemplate,
-            AccentColor, false, -10);
+            AccentColor, false);
 
         CreateLabel("LevelSelectTitle", new Vector3(0f, 305f, 0f), 1100, 52,
-            "选择任务", 34, TextColor, NGUIText.Alignment.Center);
+            "选择任务", 34, TextColor, TextAnchor.MiddleCenter);
 
         for (int levelId = 1; levelId <= GameDataMgr.MaxLevelId; levelId++)
         {
             LevelInfo level = GameDataMgr.Instance.GetLevelById(levelId);
             bool selected = !selectedEndless && !selectedTraining && selectedLevelId == levelId;
             string text = levelId.ToString("00") + "  " + ShortName(level.name);
-            UIButton button = CreateButton("LevelButton" + levelId,
-                new Vector3(-330f, 190f - (levelId - 1) * 66f, 0f), 470, 56,
+            Button button = CreateButton("LevelButton" + levelId,
+                new Vector3(-360f, 190f - (levelId - 1) * 60f, 0f), 400, 50,
                 text, selected ? AccentColor : TextColor);
+            ApplySelectionStyle(button, selected, AccentColor);
             int capturedId = levelId;
-            button.onClick.Add(new EventDelegate(() => SelectLevel(capturedId)));
+            button.onClick.AddListener(() => SelectLevel(capturedId));
         }
 
-        UIButton endless = CreateButton("EndlessModeButton", new Vector3(-330f, -148f, 0f), 470, 56,
+        Button endless = CreateButton("EndlessModeButton", new Vector3(-360f, -136f, 0f), 400, 50,
             "无尽模式", selectedEndless ? EndlessColor : TextColor);
-        endless.onClick.Add(new EventDelegate(SelectEndless));
+        ApplySelectionStyle(endless, selectedEndless, EndlessColor);
+        endless.onClick.AddListener(SelectEndless);
 
-        UIButton training = CreateButton("TrainingModeButton", new Vector3(-330f, -220f, 0f), 470, 56,
+        Button training = CreateButton("TrainingModeButton", new Vector3(-360f, -198f, 0f), 400, 50,
             "训练模式", selectedTraining ? AccentColor : TextColor);
-        training.onClick.Add(new EventDelegate(SelectTraining));
+        ApplySelectionStyle(training, selectedTraining, AccentColor);
+        training.onClick.AddListener(SelectTraining);
 
         LevelInfo selectedLevel = GameDataMgr.Instance.GetLevelById(selectedLevelId);
         string modeLabel;
@@ -176,25 +180,31 @@ public class CampaignLevelSelectUI : MonoBehaviour
             modeColor = AccentColor;
         }
 
-        CreateLabel("SelectedMissionLabel", new Vector3(285f, 175f, 0f), 500, 42,
-            modeLabel, 18, modeColor, NGUIText.Alignment.Left);
-        CreateLabel("SelectedMissionName", new Vector3(285f, 125f, 0f), 500, 52,
-            missionName, 29, TextColor, NGUIText.Alignment.Left);
-        CreateLabel("SelectedMissionObjective", new Vector3(285f, 45f, 0f), 500, 90,
-            objective, 19, TextColor, NGUIText.Alignment.Left);
-        CreateLabel("SelectedMissionPattern", new Vector3(285f, -38f, 0f), 500, 86,
-            pattern, 16, MutedColor, NGUIText.Alignment.Left);
-        CreateLabel("SelectedMissionStars", new Vector3(285f, -112f, 0f), 500, 38,
-            status, 19, modeColor, NGUIText.Alignment.Left);
-        CreateLabel("SelectedMissionRecord", new Vector3(285f, -168f, 0f), 500, 56,
-            record, 15, MutedColor, NGUIText.Alignment.Left);
+        CreateLabel("SelectedMissionLabel", new Vector3(275f, 175f, 0f), 560, 42,
+            modeLabel, 18, modeColor, TextAnchor.MiddleLeft);
+        CreateLabel("SelectedMissionName", new Vector3(275f, 125f, 0f), 560, 52,
+            missionName, 29, TextColor, TextAnchor.MiddleLeft);
+        CreateLabel("SelectedMissionObjective", new Vector3(275f, 45f, 0f), 560, 90,
+            objective, 19, TextColor, TextAnchor.MiddleLeft);
+        CreateLabel("SelectedMissionPattern", new Vector3(275f, -38f, 0f), 560, 86,
+            pattern, 16, MutedColor, TextAnchor.MiddleLeft);
+        CreateLabel("SelectedMissionStars", new Vector3(275f, -112f, 0f), 560, 38,
+            status, 19, modeColor, TextAnchor.MiddleLeft);
+        CreateLabel("SelectedMissionRecord", new Vector3(275f, -168f, 0f), 560, 56,
+            record, 15, MutedColor, TextAnchor.MiddleLeft);
 
-        UIButton back = CreateButton("LevelSelectBack", new Vector3(-270f, -315f, 0f), 280, 58,
+        Button back = CreateButton("LevelSelectBack", new Vector3(-275f, -315f, 0f), 260, 54,
             "返回难度选择", MutedColor);
-        back.onClick.Add(new EventDelegate(Back));
-        UIButton start = CreateButton("LevelSelectStart", new Vector3(270f, -315f, 0f), 340, 64,
+        back.onClick.AddListener(Back);
+        Button start = CreateButton("LevelSelectStart", new Vector3(275f, -315f, 0f), 310, 58,
             startText, modeColor);
-        start.onClick.Add(new EventDelegate(StartMission));
+        start.onClick.AddListener(StartMission);
+
+        // Do not reveal the authored black panel before custom chrome has replaced it.
+        UGUIVisualSystem.RefreshNow();
+        Canvas.ForceUpdateCanvases();
+        viewRoot.SetActive(true);
+        Canvas.ForceUpdateCanvases();
     }
 
     private void StartMission()
@@ -227,110 +237,74 @@ public class CampaignLevelSelectUI : MonoBehaviour
 
     private static Transform GetUiParent()
     {
-        UIRoot root = FindObjectOfType<UIRoot>();
-        return root != null ? root.transform : null;
+        return UGUIRuntime.Root;
     }
 
     private void CacheTemplates(Transform parent)
     {
-        panelTemplate = scrimTemplate = buttonTemplate = accentTemplate = null;
-        foreach (UI2DSprite sprite in parent.GetComponentsInChildren<UI2DSprite>(true))
+        panelTemplate = scrimTemplate = accentTemplate = null;
+        buttonTemplate = null;
+        foreach (Image image in parent.GetComponentsInChildren<Image>(true))
         {
-            UIPanel owner = NGUITools.FindInParents<UIPanel>(sprite.gameObject);
-            if (sprite.sprite2D == null || (owner != null && owner.name == "CampaignLevelSelect"))
+            if (image.sprite == null || image.transform.IsChildOf(viewRoot.transform))
                 continue;
-            switch (sprite.sprite2D.name)
+            switch (image.sprite.name)
             {
-                case "ui_panel": panelTemplate = sprite; break;
-                case "ui_scrim": scrimTemplate = sprite; break;
-                case "ui_button_primary": buttonTemplate = sprite; break;
-                case "ui_accent": accentTemplate = sprite; break;
+                case "ui_panel": panelTemplate = image; break;
+                case "ui_scrim": scrimTemplate = image; break;
+                case "ui_button_primary": buttonTemplate = image.GetComponent<Button>(); break;
+                case "ui_accent": accentTemplate = image; break;
             }
         }
         if (DifficultyPanel.Instance != null)
             labelTemplate = DifficultyPanel.Instance.labTitle;
     }
 
-    private UI2DSprite CreateSprite(string name, Vector3 position, int width, int height,
-        UI2DSprite template, Color color, bool collider, int depth)
+    private Image CreateSprite(string name, Vector3 position, int width, int height,
+        Image template, Color color, bool raycastTarget)
     {
-        GameObject go = NewObject(name, position);
-        UI2DSprite sprite = go.AddComponent<UI2DSprite>();
-        CopyStyle(sprite, template);
-        sprite.type = UIBasicSprite.Type.Sliced;
-        sprite.width = width;
-        sprite.height = height;
-        sprite.color = color;
-        sprite.depth = depth;
-        if (collider)
-            go.AddComponent<BoxCollider>().size = new Vector3(width, height, 0.1f);
-        return sprite;
+        return UGUIRuntime.CreateImage(viewRoot.transform, name, position, width, height,
+            template, null, color, raycastTarget);
     }
 
-    private UILabel CreateLabel(string name, Vector3 position, int width, int height, string text,
-        int size, Color color, NGUIText.Alignment alignment)
+    private Text CreateLabel(string name, Vector3 position, int width, int height, string text,
+        int size, Color color, TextAnchor alignment)
     {
-        GameObject go = NewObject(name, position);
-        UILabel label = go.AddComponent<UILabel>();
-        CopyLabelStyle(label);
-        label.text = text;
-        label.width = width;
-        label.height = height;
-        label.fontSize = size;
-        label.color = color;
-        label.alignment = alignment;
-        label.depth = 40;
-        label.overflowMethod = UILabel.Overflow.ShrinkContent;
-        return label;
+        return UGUIRuntime.CreateText(viewRoot.transform, name, position, width, height,
+            text, size, color, alignment, labelTemplate);
     }
 
-    private UIButton CreateButton(string name, Vector3 position, int width, int height, string text, Color color)
+    private Button CreateButton(string name, Vector3 position, int width, int height, string text, Color color)
     {
-        GameObject go = NewObject(name, position);
-        UI2DSprite sprite = go.AddComponent<UI2DSprite>();
-        CopyStyle(sprite, buttonTemplate);
-        sprite.type = UIBasicSprite.Type.Sliced;
-        sprite.width = width;
-        sprite.height = height;
-        sprite.depth = 20;
-        go.AddComponent<BoxCollider>().size = new Vector3(width, height, 0.1f);
-        UIButton button = go.AddComponent<UIButton>();
-        button.tweenTarget = go;
-        button.hover = new Color(0.78f, 1f, 1f, 1f);
-        button.pressed = new Color(0.68f, 0.84f, 0.9f, 1f);
-        CreateLabel(name + "Label", position, width - 24, height - 8, text, 20, color,
-            NGUIText.Alignment.Center).transform.SetParent(go.transform, true);
-        return button;
+        return UGUIRuntime.CreateButton(viewRoot.transform, name, position, width, height,
+            text, color, buttonTemplate, labelTemplate);
     }
 
-    private GameObject NewObject(string name, Vector3 position)
+    private static void ApplySelectionStyle(Button button, bool selected, Color accent)
     {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(viewRoot.transform, false);
-        go.transform.localPosition = position;
-        go.layer = viewRoot.layer;
-        return go;
-    }
-
-    private static void CopyStyle(UI2DSprite target, UI2DSprite source)
-    {
-        if (source == null)
+        if (button == null || button.targetGraphic == null)
             return;
-        target.sprite2D = source.sprite2D;
-        target.shader = source.shader;
-        target.border = source.border;
-    }
 
-    private void CopyLabelStyle(UILabel target)
-    {
-        if (labelTemplate == null)
+        UGUIButtonChrome chrome = button.targetGraphic as UGUIButtonChrome;
+        if (chrome != null)
+        {
+            chrome.SetRole(selected ? UGUIChromeRole.Selected : UGUIChromeRole.Secondary);
+            button.targetGraphic.CrossFadeColor(Color.white, 0f, true, true);
             return;
-        target.font = labelTemplate.font;
-        target.trueTypeFont = labelTemplate.trueTypeFont;
-        target.fontStyle = labelTemplate.fontStyle;
-        target.effectStyle = labelTemplate.effectStyle;
-        target.effectColor = labelTemplate.effectColor;
-        target.effectDistance = labelTemplate.effectDistance;
+        }
+
+        Color normal = selected
+            ? new Color(accent.r * 0.62f, accent.g * 0.62f, accent.b * 0.62f, 1f)
+            : new Color(0.12f, 0.25f, 0.31f, 1f);
+        ColorBlock colors = button.colors;
+        colors.normalColor = normal;
+        colors.selectedColor = selected ? accent : new Color(0.12f, 0.62f, 0.72f, 1f);
+        colors.highlightedColor = selected ? accent : new Color(0.12f, 0.62f, 0.72f, 1f);
+        colors.pressedColor = selected
+            ? new Color(accent.r * 0.45f, accent.g * 0.45f, accent.b * 0.45f, 1f)
+            : new Color(0.06f, 0.38f, 0.46f, 1f);
+        button.colors = colors;
+        button.targetGraphic.CrossFadeColor(normal, 0f, true, true);
     }
 
     private static string ShortName(string fullName)

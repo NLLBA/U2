@@ -1,41 +1,42 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class BeginPanel : BasePanel<BeginPanel>
 {
-    public UIButton btnBegin;
-    public UIButton btnRank;
-    public UIButton btnSetting;
-    public UIButton btnQuit;
+    public Button btnBegin;
+    public Button btnRank;
+    public Button btnSetting;
+    public Button btnQuit;
 
     public override void Init()
     {
-        btnBegin.onClick.Add(new EventDelegate(() =>
+        btnBegin.onClick.AddListener(() =>
         {
-            //ÏÔÊ¾Ñ¡½ÇÃæ°å
+            //æ˜¾ç¤ºé€‰è§’é¢æ¿
             ChoosePanel.Instance.Showme();
-            //Òş²Ø×Ô¼º
+            //éšè—è‡ªå·±
             Hideme();
-        }));
+        });
 
-        btnRank.onClick.Add(new EventDelegate(() =>
+        btnRank.onClick.AddListener(() =>
         {
-            //ÏÔÊ¾ÅÅĞĞÃæ°å
+            //æ˜¾ç¤ºæ’è¡Œé¢æ¿
             RankPanel.Instance.Showme();
-        }));
+        });
 
-        btnSetting.onClick.Add(new EventDelegate(() =>
+        btnSetting.onClick.AddListener(() =>
         {
-            //ÏÔÊ¾ÉèÖÃÃæ°å
+            //æ˜¾ç¤ºè®¾ç½®é¢æ¿
             SettingPanel.Instance.Showme();
-        }));
+        });
 
-        btnQuit.onClick.Add(new EventDelegate(() =>
+        btnQuit.onClick.AddListener(() =>
         {
-            //ÍË³öÓÎÏ·
+            //é€€å‡ºæ¸¸æˆ
             Application.Quit();
-        }));
+        });
 
     }
 

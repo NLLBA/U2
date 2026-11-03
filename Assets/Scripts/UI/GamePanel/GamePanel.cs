@@ -2,21 +2,25 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Serialization;
+using UnityEngine.UI;
 
 public class GamePanel : BasePanel<GamePanel>
 {
-    public UIButton btnBack;
-    public UILabel labTime;
-    public UILabel labLevel;
-    public UILabel labDifficulty;
-    public UILabel labSkill;
-    public UILabel labShieldIcon;
+    public Button btnBack;
+    public Text labTime;
+    public Text labLevel;
+    public Text labDifficulty;
+    public Text labSkill;
+    public Text labShieldIcon;
     [FormerlySerializedAs("labHeroSkillIcon")]
-    public UILabel labSkillIcon;
-    public UILabel labBossWarning;
-    private UILabel labEncounter;
-    private UILabel labChallenges;
-    private UILabel labCombatFeedback;
+    public Text labSkillIcon;
+    public Text labBossWarning;
+    [SerializeField] private Text labEncounter;
+    [SerializeField] private Text labChallenges;
+    [SerializeField] private Text labCombatFeedback;
+    [SerializeField] private Text labHealthCaption;
+    private readonly List<Color> hpFillColors = new List<Color>();
+    private bool hpVisualsCached;
 
     public List<GameObject> hpObjs;
 
@@ -30,58 +34,64 @@ public class GamePanel : BasePanel<GamePanel>
     private float nextDynamicRefresh;
     private float nextBossTextRefresh;
 
+    public void ConfigureHud(Text encounter, Text challenges, Text feedback, Text healthCaption)
+    {
+        labEncounter = encounter;
+        labChallenges = challenges;
+        labCombatFeedback = feedback;
+        labHealthCaption = healthCaption;
+    }
+
     public override void Init()
     {
         if (btnBack != null)
         {
-            btnBack.onClick.Add(new EventDelegate(() =>
+            btnBack.onClick.AddListener(() =>
             {
                 ShowPause();
-            }));
+            });
         }
 
         if (labLevel != null)
         {
             labLevel.fontSize = 24;
-            labLevel.height = 64;
-            labLevel.maxLineCount = 2;
-            labLevel.overflowMethod = UILabel.Overflow.ShrinkContent;
+            UGUIRuntime.SetSize(labLevel, labLevel.rectTransform.rect.width, 64f);
+            EnableBestFit(labLevel, 12, 24);
         }
 
         if (labDifficulty != null && labEncounter == null)
         {
-            labDifficulty.overflowMethod = UILabel.Overflow.ShrinkContent;
+            EnableBestFit(labDifficulty, 11, labDifficulty.fontSize);
             labEncounter = Instantiate(labDifficulty, labDifficulty.transform.parent);
             labEncounter.name = "labEncounter";
-            labEncounter.transform.localPosition = labDifficulty.transform.localPosition + Vector3.down * 44f;
-            labEncounter.height = 52;
+            labEncounter.rectTransform.anchoredPosition = labDifficulty.rectTransform.anchoredPosition + Vector2.down * 44f;
+            UGUIRuntime.SetSize(labEncounter, labEncounter.rectTransform.rect.width, 52f);
             labEncounter.fontSize = 17;
-            labEncounter.maxLineCount = 2;
+            EnableBestFit(labEncounter, 10, 17);
             labEncounter.text = string.Empty;
 
             labChallenges = Instantiate(labDifficulty, labDifficulty.transform.parent);
             labChallenges.name = "labChallengeProgress";
-            labChallenges.transform.localPosition = labDifficulty.transform.localPosition + Vector3.down * 102f;
-            labChallenges.height = 48;
+            labChallenges.rectTransform.anchoredPosition = labDifficulty.rectTransform.anchoredPosition + Vector2.down * 102f;
+            UGUIRuntime.SetSize(labChallenges, labChallenges.rectTransform.rect.width, 48f);
             labChallenges.fontSize = 16;
-            labChallenges.maxLineCount = 2;
-            labChallenges.overflowMethod = UILabel.Overflow.ShrinkContent;
+            EnableBestFit(labChallenges, 10, 16);
             labChallenges.text = string.Empty;
             labChallenges.gameObject.SetActive(false);
         }
 
         if (labBossWarning != null)
         {
-            labBossWarning.overflowMethod = UILabel.Overflow.ShrinkContent;
+            EnableBestFit(labBossWarning, 12, labBossWarning.fontSize);
             labBossWarning.gameObject.SetActive(false);
             if (labCombatFeedback == null)
             {
                 labCombatFeedback = Instantiate(labBossWarning, labBossWarning.transform.parent);
                 labCombatFeedback.name = "labCombatFeedback";
-                labCombatFeedback.transform.localPosition = labBossWarning.transform.localPosition + Vector3.down * 92f;
-                labCombatFeedback.height = 54;
+                labCombatFeedback.rectTransform.anchoredPosition = labBossWarning.rectTransform.anchoredPosition + Vector2.down * 92f;
+                UGUIRuntime.SetSize(labCombatFeedback, labCombatFeedback.rectTransform.rect.width, 54f);
                 labCombatFeedback.fontSize = 24;
-                labCombatFeedback.maxLineCount = 2;
+                EnableBestFit(labCombatFeedback, 12, 24);
                 labCombatFeedback.gameObject.SetActive(false);
             }
         }
@@ -91,10 +101,85 @@ public class GamePanel : BasePanel<GamePanel>
 
     public void ChangeHP(int hp)
     {
+        CacheHealthVisuals();
+        int current = Mathf.Clamp(hp, 0, hpObjs.Count);
         for (int i = 0; i < hpObjs.Count; i++)
         {
-            hpObjs[i].SetActive(i < hp);
+            GameObject source = hpObjs[i];
+            if (source == null)
+                continue;
+            source.SetActive(true);
+            GameObject view = source;
+            if (view == null)
+                continue;
+            view.SetActive(true);
+            Graphic graphic = view.GetComponent<Graphic>();
+            if (graphic == null)
+                graphic = view.GetComponentInChildren<Graphic>(true);
+            if (graphic != null)
+            {
+                graphic.enabled = true;
+                graphic.color = i < current && i < hpFillColors.Count
+                    ? hpFillColors[i]
+                    : new Color(0.003f, 0.008f, 0.012f, 1f);
+            }
         }
+
+        if (labHealthCaption == null)
+            labHealthCaption = UGUIRuntime.Find<Text>(UGUIRuntime.View(this), "Polish_HealthCaption");
+        if (labHealthCaption != null)
+            labHealthCaption.text = "机体完整度   " + current.ToString("00") + " / " + hpObjs.Count.ToString("00");
+    }
+
+    private void CacheHealthVisuals()
+    {
+        if (hpVisualsCached)
+            return;
+        hpVisualsCached = true;
+        hpFillColors.Clear();
+        for (int i = 0; i < hpObjs.Count; i++)
+        {
+            GameObject view = hpObjs[i];
+            Graphic image = view != null ? view.GetComponentInChildren<Graphic>(true) : null;
+            Color active = new Color(0.22f, 0.82f, 0.88f, 1f);
+            hpFillColors.Add(active);
+            if (image != null)
+            {
+                Image solid = image as Image;
+                if (solid != null)
+                {
+                    Outline outline = solid.GetComponent<Outline>();
+                    if (outline != null)
+                        outline.enabled = false;
+                    EnsureHealthSegmentFrame(solid.rectTransform);
+                }
+            }
+        }
+    }
+
+    private static void EnsureHealthSegmentFrame(RectTransform segment)
+    {
+        if (segment == null)
+            return;
+        Transform existing = segment.Find("HealthSegmentFrame");
+        CombatHealthSegmentFrame frame = existing != null
+            ? existing.GetComponent<CombatHealthSegmentFrame>()
+            : null;
+        if (frame == null)
+        {
+            GameObject frameObject = new GameObject("HealthSegmentFrame", typeof(RectTransform),
+                typeof(CanvasRenderer), typeof(CombatHealthSegmentFrame));
+            frameObject.transform.SetParent(segment, false);
+            frame = frameObject.GetComponent<CombatHealthSegmentFrame>();
+        }
+        RectTransform frameRect = frame.rectTransform;
+        frameRect.anchorMin = Vector2.zero;
+        frameRect.anchorMax = Vector2.one;
+        frameRect.offsetMin = Vector2.zero;
+        frameRect.offsetMax = Vector2.zero;
+        frameRect.SetAsLastSibling();
+        frame.color = Color.white;
+        frame.raycastTarget = false;
     }
 
     private void Update()
@@ -247,12 +332,12 @@ public class GamePanel : BasePanel<GamePanel>
         else if (labEncounter != null && encounter != null)
         {
             LevelInfo level = GameDataMgr.Instance.GetLevel();
-            labEncounter.color = LevelEncounterDirector.Accent(level.id);
-            string affinity = PlayerObject.ActiveStageAffinityText();
-            string encounterText = level.featureTitle + " · 阶段" + encounter.CurrentPhase + "·" +
-                encounter.PhaseName + " · " + encounter.PhaseRuleText +
-                (string.IsNullOrEmpty(affinity) ? string.Empty : " · " + affinity) +
-                "\n" + encounter.StatusText();
+            labEncounter.color = level.id == 4
+                ? new Color(1f, 0.67f, 0.22f, 1f)
+                : LevelEncounterDirector.Accent(level.id);
+            string encounterText = "战术阶段 " + encounter.CurrentPhase.ToString("00") +
+                "  ·  " + encounter.PhaseName + "  ·  " + level.featureTitle +
+                "\n" + CompactEncounterStatus(encounter, level);
             if (ScoreManager.Instance != null && ScoreManager.Instance.MechanicCombo > 0)
                 encounterText += " · 连击 " + ScoreManager.Instance.MechanicCombo;
             SetText(labEncounter, encounterText);
@@ -339,7 +424,9 @@ public class GamePanel : BasePanel<GamePanel>
                     ? "无尽模式 · 阶段 " + level.id + "\n弹幕逐步加强，持续生存挑战最高分"
                     : level.name + " · " + level.featureTitle + "\n" + level.featureHint);
             labBossWarning.transform.localScale = Vector3.one;
-            labBossWarning.color = LevelEncounterDirector.Accent(level.id);
+            labBossWarning.color = level.id == 4
+                ? new Color(1f, 0.67f, 0.22f, 1f)
+                : LevelEncounterDirector.Accent(level.id);
             return;
         }
 
@@ -389,9 +476,31 @@ public class GamePanel : BasePanel<GamePanel>
         labCombatFeedback.transform.localScale = Vector3.one * Mathf.Lerp(1f, 1.08f, fade);
     }
 
-    private static void SetText(UILabel label, string value)
+    private static void SetText(Text label, string value)
     {
-        if (label != null && label.text != value)
-            label.text = value;
+        UGUIRuntime.SetText(label, value);
+    }
+
+    private static void EnableBestFit(Text label, int minimum, int maximum)
+    {
+        label.resizeTextForBestFit = true;
+        label.resizeTextMinSize = minimum;
+        label.resizeTextMaxSize = Mathf.Max(minimum, maximum);
+    }
+
+    private static string CompactEncounterStatus(LevelEncounterDirector encounter, LevelInfo level)
+    {
+        SignalRelayController relay = SignalRelayController.Instance;
+        if (level != null && level.id == 4 && relay != null)
+        {
+            if (relay.ActivatedBeacons >= 3)
+                return "信标 3 / 3  ·  全部激活";
+            int energy = Mathf.RoundToInt(relay.CarriedEnergy * 100f);
+            int charge = Mathf.RoundToInt(relay.BeaconCharge * 100f);
+            return relay.CarriedEnergy < 0.05f
+                ? "携带能量 00%  ·  前往中央蓝环取能"
+                : "携带能量 " + energy + "%  ·  当前信标 " + charge + "%  ·  已激活 " + relay.ActivatedBeacons + " / 3";
+        }
+        return encounter.StatusText();
     }
 }

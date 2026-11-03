@@ -63,10 +63,6 @@ public class BKMusicTests
         Assert.IsNotNull(panel);
         typeof(SettingPanel).GetMethod("RefreshControls", BindingFlags.Instance | BindingFlags.NonPublic)
             .Invoke(panel, null);
-        Assert.IsFalse(panel.toggleMusic.invertSpriteState,
-            "The illuminated music control must represent enabled playback.");
-        Assert.IsFalse(panel.toggleSound.invertSpriteState,
-            "The illuminated sound control must represent enabled effects.");
 
         MusicData settings = GameDataMgr.Instance.musicData;
         bool originalMusicOn = settings.musicOn;
@@ -75,16 +71,12 @@ public class BKMusicTests
         float originalSoundVolume = settings.soundVolume;
 
         int notifications = 0;
-        EventDelegate callback = new EventDelegate(() => notifications++);
+        UnityEngine.Events.UnityAction<bool> callback = value => notifications++;
 
         try
         {
-            panel.toggleMusic.startsActive = false;
-            panel.toggleSound.startsActive = false;
-            panel.toggleMusic.Start();
-            panel.toggleSound.Start();
-            panel.toggleMusic.onChange.Add(callback);
-            panel.toggleSound.onChange.Add(callback);
+            panel.toggleMusic.onValueChanged.AddListener(callback);
+            panel.toggleSound.onValueChanged.AddListener(callback);
 
             settings.musicOn = true;
             settings.soundOn = true;
@@ -94,8 +86,8 @@ public class BKMusicTests
             typeof(SettingPanel).GetMethod("RefreshControls", BindingFlags.Instance | BindingFlags.NonPublic)
                 .Invoke(panel, null);
 
-            Assert.IsTrue(panel.toggleMusic.value);
-            Assert.IsTrue(panel.toggleSound.value);
+            Assert.IsTrue(panel.toggleMusic.isOn);
+            Assert.IsTrue(panel.toggleSound.isOn);
             Assert.AreEqual(0.65f, panel.sliderMusic.value, 0.001f);
             Assert.AreEqual(0.7f, panel.sliderSound.value, 0.001f);
             Assert.AreEqual(0, notifications, "Refreshing saved settings must not invoke change callbacks.");
@@ -103,8 +95,8 @@ public class BKMusicTests
         }
         finally
         {
-            panel.toggleMusic.onChange.Remove(callback);
-            panel.toggleSound.onChange.Remove(callback);
+            panel.toggleMusic.onValueChanged.RemoveListener(callback);
+            panel.toggleSound.onValueChanged.RemoveListener(callback);
             settings.musicOn = originalMusicOn;
             settings.soundOn = originalSoundOn;
             settings.musicVolume = originalMusicVolume;

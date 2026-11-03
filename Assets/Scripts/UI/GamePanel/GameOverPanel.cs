@@ -1,15 +1,16 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 public class GameOverPanel : BasePanel<GameOverPanel>
 {
     private const string DefaultPilotName = "Player";
 
-    public UILabel labTime;
-    public UIInput inputName;
-    public UIButton btnSure;
-    public UIButton btnRestart;
+    public Text labTime;
+    public InputField inputName;
+    public Button btnSure;
+    public Button btnRestart;
 
     private int endTime;
     private bool submitted;
@@ -20,12 +21,12 @@ public class GameOverPanel : BasePanel<GameOverPanel>
 
         if (btnSure != null)
         {
-            btnSure.onClick.Add(new EventDelegate(() => Submit("BeginScene")));
+            btnSure.onClick.AddListener(() => Submit("BeginScene"));
         }
 
         if (btnRestart != null)
         {
-            btnRestart.onClick.Add(new EventDelegate(() => Submit("GameScene")));
+            btnRestart.onClick.AddListener(() => Submit("GameScene"));
         }
 
         Hideme();
@@ -46,9 +47,12 @@ public class GameOverPanel : BasePanel<GameOverPanel>
 
         if (inputName != null)
         {
-            inputName.RemoveFocus();
-            inputName.value = DefaultPilotName;
-            inputName.selectAllTextOnFocus = true;
+            inputName.DeactivateInputField();
+            inputName.SetTextWithoutNotify(DefaultPilotName);
+            inputName.caretPosition = inputName.text.Length;
+            inputName.selectionAnchorPosition = 0;
+            inputName.selectionFocusPosition = inputName.text.Length;
+            StartCoroutine(FocusPilotInput());
         }
     }
 
@@ -63,11 +67,11 @@ public class GameOverPanel : BasePanel<GameOverPanel>
             return;
 
         submitted = true;
-        string name = inputName != null ? NormalizePilotName(inputName.value) : DefaultPilotName;
+        string name = inputName != null ? NormalizePilotName(inputName.text) : DefaultPilotName;
         if (inputName != null)
         {
-            inputName.value = name;
-            inputName.RemoveFocus();
+            inputName.SetTextWithoutNotify(name);
+            inputName.DeactivateInputField();
         }
 
         GameDataMgr.Instance.AddRank(name, endTime);
@@ -79,33 +83,70 @@ public class GameOverPanel : BasePanel<GameOverPanel>
         if (inputName == null)
             return;
 
-        inputName.selectAllTextOnFocus = true;
-        if (string.IsNullOrEmpty(inputName.value))
-            inputName.value = DefaultPilotName;
+        Text previousText = inputName.textComponent;
+        Text inputText = UGUIRuntime.Find<Text>(inputName.transform, "PilotNameText");
+        if (inputText == null)
+        {
+            inputText = UGUIRuntime.CreateText(inputName.transform, "PilotNameText", Vector3.zero,
+                352, 42, string.Empty, 24, new Color(0.92f, 0.97f, 1f, 1f),
+                TextAnchor.MiddleCenter, previousText);
+        }
+        RectTransform textRect = inputText.rectTransform;
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = new Vector2(16f, 6f);
+        textRect.offsetMax = new Vector2(-16f, -6f);
+        textRect.SetAsLastSibling();
+        inputText.resizeTextForBestFit = false;
+        inputName.textComponent = inputText;
+        if (previousText != null && previousText != inputText)
+            previousText.gameObject.SetActive(false);
 
-        UIEventListener listener = UIEventListener.Get(inputName.gameObject);
-        listener.onPress -= BeginPilotEditing;
-        listener.onPress += BeginPilotEditing;
+        Text placeholder = inputName.placeholder as Text;
+        if (placeholder == null)
+            placeholder = UGUIRuntime.Find<Text>(inputName.transform, "PilotNamePlaceholder");
+        if (placeholder == null)
+        {
+            placeholder = UGUIRuntime.CreateText(inputName.transform, "PilotNamePlaceholder", Vector3.zero,
+                352, 42, "输入飞行员代号", 20, new Color(0.48f, 0.64f, 0.72f, 0.8f),
+                TextAnchor.MiddleCenter, inputText);
+        }
+        RectTransform placeholderRect = placeholder.rectTransform;
+        placeholderRect.anchorMin = Vector2.zero;
+        placeholderRect.anchorMax = Vector2.one;
+        placeholderRect.offsetMin = new Vector2(16f, 6f);
+        placeholderRect.offsetMax = new Vector2(-16f, -6f);
+        placeholder.text = "输入飞行员代号";
+        placeholder.alignment = TextAnchor.MiddleCenter;
+        placeholder.resizeTextForBestFit = false;
+        placeholder.fontSize = 20;
+        placeholder.color = new Color(0.48f, 0.64f, 0.72f, 0.8f);
+        placeholder.raycastTarget = false;
+        placeholder.transform.SetAsFirstSibling();
+        inputName.placeholder = placeholder;
+
+        inputText.transform.SetAsLastSibling();
+        inputText.color = new Color(0.92f, 0.97f, 1f, 1f);
+        inputText.resizeTextForBestFit = false;
+        inputText.fontSize = 22;
+        inputText.alignment = TextAnchor.MiddleCenter;
+        inputText.raycastTarget = false;
+        inputName.caretBlinkRate = 0.85f;
+        inputName.characterLimit = 16;
+
+        if (string.IsNullOrEmpty(inputName.text))
+            inputName.SetTextWithoutNotify(DefaultPilotName);
     }
 
-    private void BeginPilotEditing(GameObject ignored, bool isPressed)
+    private IEnumerator FocusPilotInput()
     {
-        if (!isPressed || inputName == null || !inputName.gameObject.activeInHierarchy)
-            return;
-
-        // Normally UICamera has already sent OnSelect during the press. If
-        // its global selection changed without that notification, restore
-        // UIInput's internal selection explicitly before editing.
-        if (!inputName.isSelected)
-        {
-            UICamera.selectedObject = inputName.gameObject;
-            if (!inputName.isSelected)
-                UICamera.Notify(inputName.gameObject, "OnSelect", true);
-        }
-
-        inputName.isSelected = true;
-        inputName.selectionStart = 0;
-        inputName.selectionEnd = inputName.value.Length;
+        yield return null;
+        if (inputName == null || !inputName.gameObject.activeInHierarchy)
+            yield break;
+        inputName.Select();
+        inputName.ActivateInputField();
+        inputName.selectionAnchorPosition = 0;
+        inputName.selectionFocusPosition = inputName.text.Length;
     }
 
     private static string NormalizePilotName(string value)

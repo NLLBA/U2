@@ -1,21 +1,27 @@
 using System.Collections;
+using System.Collections.Generic;
 using System.Globalization;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 public class CampaignMissionUI : MonoBehaviour
 {
     private static CampaignMissionUI instance;
 
     private GameObject resultRoot;
-    private UI2DSprite panelTemplate;
-    private UI2DSprite scrimTemplate;
-    private UI2DSprite buttonTemplate;
-    private UI2DSprite accentTemplate;
-    private UILabel labelTemplate;
-    private UILabel challengeDetailsLabel;
+    private Image panelTemplate;
+    private Image scrimTemplate;
+    private Button buttonTemplate;
+    private Image accentTemplate;
+    private Text labelTemplate;
+    private Text challengeDetailsLabel;
+    private Text navigationStatus;
+    private Button challengeDetailsButton;
+    private readonly List<Button> resultButtons = new List<Button>();
     private CampaignMissionController displayedMission;
     private bool expandedChallengeDetails;
+    private bool navigating;
     private CampaignMissionState displayedState = CampaignMissionState.Inactive;
 
     private static readonly Color PanelColor = new Color(0.015f, 0.055f, 0.09f, 0.98f);
@@ -65,9 +71,17 @@ public class CampaignMissionUI : MonoBehaviour
             return;
         if (mission.State == CampaignMissionState.Victory || mission.State == CampaignMissionState.Failed)
         {
-            displayedState = mission.State;
-            BuildResult(mission);
+            ShowResultNow(mission);
         }
+    }
+
+    public void ShowResultNow(CampaignMissionController mission)
+    {
+        if (mission == null ||
+            (mission.State != CampaignMissionState.Victory && mission.State != CampaignMissionState.Failed))
+            return;
+        displayedState = mission.State;
+        BuildResult(mission);
     }
 
     private void BuildResult(CampaignMissionController mission)
@@ -75,17 +89,17 @@ public class CampaignMissionUI : MonoBehaviour
         DestroyResult();
         displayedMission = mission;
         expandedChallengeDetails = false;
+        navigating = false;
+        resultButtons.Clear();
         if (GameOverPanel.Instance != null && GameOverPanel.Instance.gameObject.activeSelf)
             GameOverPanel.Instance.Hideme();
 
-        UIRoot uiRoot = FindObjectOfType<UIRoot>();
-        if (uiRoot == null)
+        Transform parent = UGUIRuntime.Root;
+        if (parent == null)
             return;
-        resultRoot = new GameObject("CampaignMissionResult");
-        resultRoot.transform.SetParent(uiRoot.transform, false);
-        resultRoot.layer = uiRoot.gameObject.layer;
-        resultRoot.AddComponent<UIPanel>().depth = 88;
-        CacheTemplates(uiRoot.transform);
+        UGUIRuntime.EnsureEventSystem();
+        resultRoot = UGUIRuntime.CreateRect(parent, "CampaignMissionResult", Vector3.zero, 1920, 1080).gameObject;
+        CacheTemplates(parent);
 
         LevelInfo level = mission.Level;
         bool victory = mission.State == CampaignMissionState.Victory;
@@ -95,25 +109,27 @@ public class CampaignMissionUI : MonoBehaviour
             ? (level != null && level.id == GameDataMgr.MaxLevelId ? "风暴挑战完成，可前往无尽模式冲榜" : "行动完成，可继续挑战下一关")
             : "调整策略后再次出击";
 
-        UI2DSprite scrim = CreateSprite(resultRoot.transform, "MissionResultScrim", Vector3.zero,
-            4000, 2400, scrimTemplate, new Color(1f, 1f, 1f, 0.84f), true, -100);
-        CreateSprite(resultRoot.transform, "MissionResultPanel", Vector3.zero,
-            1120, 740, panelTemplate, Color.white, true, -50);
-        CreateSprite(resultRoot.transform, "MissionResultAccent", new Vector3(0f, 330f, 0f),
-            940, 5, accentTemplate, resultColor, false, -10);
+        CreateSprite(resultRoot.transform, "MissionResultScrim", Vector3.zero,
+            4000, 2400, scrimTemplate, new Color(0f, 0.015f, 0.03f, 0.78f), true);
+        CreateSurface(resultRoot.transform, "MissionResultPanel", Vector3.zero,
+            1040, 660, CombatGraphic.Shape.Dialog, resultColor);
+        CreateSprite(resultRoot.transform, "MissionResultAccent", new Vector3(0f, 296f, 0f),
+            920, 3, accentTemplate, resultColor, false);
 
-        CreateLabel(resultRoot.transform, "MissionResultEyebrow", new Vector3(0f, 285f, 0f), 920, 30,
-            "单人任务 · 行动结算", 16, MutedColor, NGUIText.Alignment.Center);
-        CreateLabel(resultRoot.transform, "MissionResultTitle", new Vector3(0f, 220f, 0f), 920, 70,
-            title, 46, resultColor, NGUIText.Alignment.Center);
-        CreateLabel(resultRoot.transform, "MissionResultSubtitle", new Vector3(0f, 165f, 0f), 920, 32,
-            subtitle, 17, MutedColor, NGUIText.Alignment.Center);
+        CreateLabel(resultRoot.transform, "MissionResultEyebrow", new Vector3(-390f, 250f, 0f), 180, 28,
+            "行动结算 / RESULT", 14, MutedColor, TextAnchor.MiddleLeft);
+        CreateLabel(resultRoot.transform, "MissionResultTitle", new Vector3(-280f, 198f, 0f), 400, 60,
+            title, 44, resultColor, TextAnchor.MiddleLeft);
+        CreateLabel(resultRoot.transform, "MissionResultSubtitle", new Vector3(-280f, 154f, 0f), 400, 30,
+            subtitle, 16, MutedColor, TextAnchor.MiddleLeft);
 
         string levelName = level != null ? level.name : "任务";
-        CreateLabel(resultRoot.transform, "MissionResultLevel", new Vector3(0f, 112f, 0f), 920, 38,
-            levelName, 23, TextColor, NGUIText.Alignment.Center);
-        CreateSprite(resultRoot.transform, "MissionResultDivider", new Vector3(0f, 80f, 0f),
-            880, 2, accentTemplate, new Color(MutedColor.r, MutedColor.g, MutedColor.b, 0.4f), false, -10);
+        CreateLabel(resultRoot.transform, "MissionResultLevelCaption", new Vector3(260f, 226f, 0f), 360, 24,
+            "任务档案", 14, MutedColor, TextAnchor.MiddleLeft);
+        CreateLabel(resultRoot.transform, "MissionResultLevel", new Vector3(260f, 188f, 0f), 360, 36,
+            levelName, 23, TextColor, TextAnchor.MiddleLeft);
+        CreateSprite(resultRoot.transform, "MissionResultColumnDivider", new Vector3(0f, 197f, 0f),
+            1, 126, accentTemplate, new Color(MutedColor.r, MutedColor.g, MutedColor.b, 0.35f), false);
 
         ScoreManager score = ScoreManager.Instance;
         int totalScore = score != null ? score.TotalScore : 0;
@@ -124,75 +140,85 @@ public class CampaignMissionUI : MonoBehaviour
             GameDataMgr.Instance.GetDifficulty().id : 2;
         string multiplierText = (score != null ? score.ScoreRate : ScoreManager.DefaultRateFor(difficultyId))
             .ToString("0.00", CultureInfo.InvariantCulture) + "x";
-        CreateLabel(resultRoot.transform, "MissionResultScoreCaption", new Vector3(-300f, 30f, 0f), 280, 28,
-            "最终分数 · " + multiplierText, 15, MutedColor, NGUIText.Alignment.Center);
-        CreateLabel(resultRoot.transform, "MissionResultScore", new Vector3(-300f, -15f, 0f), 280, 52,
-            totalScore + " 分", 32, resultColor, NGUIText.Alignment.Center);
-        CreateLabel(resultRoot.transform, "MissionResultTimeCaption", new Vector3(0f, 30f, 0f), 280, 28,
-            "生存时间", 15, MutedColor, NGUIText.Alignment.Center);
-        CreateLabel(resultRoot.transform, "MissionResultTime", new Vector3(0f, -15f, 0f), 280, 52,
-            FormatTime(runTime), 30, TextColor, NGUIText.Alignment.Center);
-        CreateLabel(resultRoot.transform, "MissionResultActionCaption", new Vector3(300f, 30f, 0f), 280, 28,
-            "行动记录", 15, MutedColor, NGUIText.Alignment.Center);
-        CreateLabel(resultRoot.transform, "MissionResultAction", new Vector3(300f, -15f, 0f), 280, 52,
-            "清除 " + clears + "  ·  BOSS " + bosses, 19, TextColor, NGUIText.Alignment.Center);
+        CreateSurface(resultRoot.transform, "MissionResultScoreCard", new Vector3(-310f, 55f, 0f),
+            270, 116, CombatGraphic.Shape.Stat, resultColor);
+        CreateSurface(resultRoot.transform, "MissionResultTimeCard", new Vector3(0f, 55f, 0f),
+            270, 116, CombatGraphic.Shape.Stat, AccentColor);
+        CreateSurface(resultRoot.transform, "MissionResultActionCard", new Vector3(310f, 55f, 0f),
+            270, 116, CombatGraphic.Shape.Stat, AccentColor);
+        CreateLabel(resultRoot.transform, "MissionResultScoreCaption", new Vector3(-310f, 78f, 0f), 230, 24,
+            "最终分数 · " + multiplierText, 15, MutedColor, TextAnchor.MiddleCenter);
+        CreateLabel(resultRoot.transform, "MissionResultScore", new Vector3(-310f, 39f, 0f), 230, 46,
+            totalScore + " 分", 32, resultColor, TextAnchor.MiddleCenter);
+        CreateLabel(resultRoot.transform, "MissionResultTimeCaption", new Vector3(0f, 78f, 0f), 230, 24,
+            "生存时间", 15, MutedColor, TextAnchor.MiddleCenter);
+        CreateLabel(resultRoot.transform, "MissionResultTime", new Vector3(0f, 39f, 0f), 230, 46,
+            FormatTime(runTime), 30, TextColor, TextAnchor.MiddleCenter);
+        CreateLabel(resultRoot.transform, "MissionResultActionCaption", new Vector3(310f, 78f, 0f), 230, 24,
+            "行动记录", 15, MutedColor, TextAnchor.MiddleCenter);
+        CreateLabel(resultRoot.transform, "MissionResultAction", new Vector3(310f, 39f, 0f), 230, 46,
+            "清除 " + clears + "  ·  BOSS " + bosses, 19, TextColor, TextAnchor.MiddleCenter);
 
         string evaluation = victory
             ? "任务评价  " + new string('★', mission.EarnedStars) + new string('☆', 3 - mission.EarnedStars) +
                 "  · 难度倍率 " + multiplierText
             : "任务进度  " + mission.ObjectiveProgressText().Replace("任务进度：", string.Empty) +
                 "  · 难度倍率 " + multiplierText;
-        CreateLabel(resultRoot.transform, "MissionResultEvaluation", new Vector3(0f, -76f, 0f), 900, 36,
-            evaluation, 22, resultColor, NGUIText.Alignment.Center);
-        CreateLabel(resultRoot.transform, "MissionResultMechanics", new Vector3(0f, -128f, 0f), 940, 48,
-            MechanicStatsText(score, mission), 16, TextColor, NGUIText.Alignment.Center);
-        challengeDetailsLabel = CreateLabel(resultRoot.transform, "MissionResultChallenges", new Vector3(0f, -180f, 0f), 940, 30,
+        CreateLabel(resultRoot.transform, "MissionResultEvaluation", new Vector3(0f, -36f, 0f), 900, 34,
+            evaluation, 22, resultColor, TextAnchor.MiddleCenter);
+        CreateLabel(resultRoot.transform, "MissionResultMechanics", new Vector3(0f, -78f, 0f), 900, 42,
+            MechanicStatsText(score, mission), 16, TextColor, TextAnchor.MiddleCenter);
+        CreateSurface(resultRoot.transform, "MissionChallengeDetails", new Vector3(0f, -157f, 0f),
+            900, 96, CombatGraphic.Shape.Stat, resultColor);
+        challengeDetailsLabel = CreateLabel(resultRoot.transform, "MissionResultChallenges", new Vector3(0f, -143f, 0f), 850, 30,
             victory ? mission.ChallengeText() : "挑战目标需通关后结算",
-            15, victory ? resultColor : MutedColor, NGUIText.Alignment.Center);
-        CreateLabel(resultRoot.transform, "MissionResultAdvice", new Vector3(0f, -219f, 0f), 940, 28,
+            15, victory ? resultColor : MutedColor, TextAnchor.MiddleCenter);
+        CreateLabel(resultRoot.transform, "MissionResultAdvice", new Vector3(0f, -181f, 0f), 850, 24,
             (victory ? "评级依据：生命、受击、" + mission.MistakeMetricLabel() + "与连击 · " : "建议：") + mission.ResultAdvice(),
-            15, MutedColor, NGUIText.Alignment.Center);
+            15, MutedColor, TextAnchor.MiddleCenter);
 
-        UIButton retry = CreateButton(resultRoot.transform, "MissionRetryButton", new Vector3(-390f, -293f, 0f),
-            210, 58, "再来一次", AccentColor);
-        retry.onClick.Add(new EventDelegate(Retry));
-        UIButton select = CreateButton(resultRoot.transform, "MissionMenuButton", new Vector3(-130f, -293f, 0f),
-            220, 58, "返回选关", TextColor);
-        select.onClick.Add(new EventDelegate(ReturnToLevelSelect));
-        UIButton details = CreateButton(resultRoot.transform, "MissionChallengeButton", new Vector3(130f, -293f, 0f),
-            220, 58, "挑战详情", TextColor);
-        details.onClick.Add(new EventDelegate(ToggleChallengeDetails));
-        UIButton rank = CreateButton(resultRoot.transform, "MissionRankButton", new Vector3(390f, -293f, 0f),
-            220, 58, "排行榜", MutedColor);
-        rank.onClick.Add(new EventDelegate(OpenLeaderboard));
+        Button retry = CreateActionButton(resultRoot.transform, "MissionRetryButton", new Vector3(-365f, -260f, 0f),
+            200, 56, "再来一次", AccentColor, false);
+        retry.onClick.AddListener(Retry);
+        Button select = CreateActionButton(resultRoot.transform, "MissionMenuButton", new Vector3(-122f, -260f, 0f),
+            210, 56, "返回选关", AccentColor, false);
+        select.onClick.AddListener(ReturnToLevelSelect);
+        challengeDetailsButton = CreateActionButton(resultRoot.transform, "MissionChallengeButton", new Vector3(122f, -260f, 0f),
+            210, 56, "展开详情", AccentColor, false);
+        challengeDetailsButton.onClick.AddListener(ToggleChallengeDetails);
+        Button rank = CreateActionButton(resultRoot.transform, "MissionRankButton", new Vector3(365f, -260f, 0f),
+            210, 56, "排行榜", AccentColor, false);
+        rank.onClick.AddListener(OpenLeaderboard);
+        navigationStatus = CreateLabel(resultRoot.transform, "MissionNavigationStatus", new Vector3(0f, -305f, 0f),
+            700, 20, string.Empty, 13, MutedColor, TextAnchor.MiddleCenter);
     }
 
     private void NextMission()
     {
         GameDataMgr.Instance.SetLevel(GameDataMgr.Instance.selectedLevelId + 1);
-        StartCoroutine(LoadScene("GameScene"));
+        BeginNavigation("GameScene", "正在载入下一任务...");
     }
 
     private void Retry()
     {
-        StartCoroutine(LoadScene("GameScene"));
+        BeginNavigation("GameScene", "正在重新部署...");
     }
 
     private void ReturnToMenu()
     {
-        StartCoroutine(LoadScene("BeginScene"));
+        BeginNavigation("BeginScene", "正在返回主菜单...");
     }
 
     private void ReturnToLevelSelect()
     {
         MenuNavigationRequest.Pending = MenuNavigationTarget.LevelSelect;
-        StartCoroutine(LoadScene("BeginScene"));
+        BeginNavigation("BeginScene", "正在返回选关...");
     }
 
     private void OpenLeaderboard()
     {
         MenuNavigationRequest.Pending = MenuNavigationTarget.Leaderboard;
-        StartCoroutine(LoadScene("BeginScene"));
+        BeginNavigation("BeginScene", "正在打开排行榜...");
     }
 
     private void ToggleChallengeDetails()
@@ -201,7 +227,8 @@ public class CampaignMissionUI : MonoBehaviour
             return;
         expandedChallengeDetails = !expandedChallengeDetails;
         ScoreManager score = ScoreManager.Instance;
-        challengeDetailsLabel.height = expandedChallengeDetails ? 62 : 30;
+        UGUIRuntime.SetSize(challengeDetailsLabel, challengeDetailsLabel.rectTransform.rect.width,
+            expandedChallengeDetails ? 62f : 30f);
         challengeDetailsLabel.text = expandedChallengeDetails
             ? "挑战详情：受击 " + (score != null ? score.PlayerHits : 0) +
                 " · " + displayedMission.MistakeMetricLabel() + " " + displayedMission.ChallengeMistakeCount() +
@@ -209,6 +236,21 @@ public class CampaignMissionUI : MonoBehaviour
                 "/" + displayedMission.ChallengeComboTarget() + "\n" + displayedMission.ResultAdvice()
             : (displayedMission.State == CampaignMissionState.Victory
                 ? displayedMission.ChallengeText() : "挑战目标需通关后结算");
+        Text buttonLabel = UGUIRuntime.Label(challengeDetailsButton);
+        if (buttonLabel != null)
+            buttonLabel.text = expandedChallengeDetails ? "收起详情" : "展开详情";
+    }
+
+    private void BeginNavigation(string sceneName, string message)
+    {
+        if (navigating)
+            return;
+        navigating = true;
+        foreach (Button button in resultButtons)
+            if (button != null) button.interactable = false;
+        if (navigationStatus != null)
+            navigationStatus.text = message;
+        StartCoroutine(LoadScene(sceneName));
     }
 
     private IEnumerator LoadScene(string sceneName)
@@ -232,108 +274,81 @@ public class CampaignMissionUI : MonoBehaviour
         Destroy(resultRoot);
         resultRoot = null;
         challengeDetailsLabel = null;
+        challengeDetailsButton = null;
+        navigationStatus = null;
+        resultButtons.Clear();
         displayedMission = null;
+        navigating = false;
     }
 
     private void CacheTemplates(Transform parent)
     {
-        panelTemplate = scrimTemplate = buttonTemplate = accentTemplate = null;
-        foreach (UI2DSprite sprite in parent.GetComponentsInChildren<UI2DSprite>(true))
+        panelTemplate = scrimTemplate = accentTemplate = null;
+        buttonTemplate = null;
+        foreach (Image image in parent.GetComponentsInChildren<Image>(true))
         {
-            UIPanel owner = NGUITools.FindInParents<UIPanel>(sprite.gameObject);
-            if (sprite.sprite2D == null || (owner != null && owner.name == "CampaignMissionResult"))
+            if (image.sprite == null || image.transform.IsChildOf(resultRoot.transform))
                 continue;
-            switch (sprite.sprite2D.name)
+            switch (image.sprite.name)
             {
-                case "ui_panel": panelTemplate = sprite; break;
-                case "ui_scrim": scrimTemplate = sprite; break;
-                case "ui_button_primary": buttonTemplate = sprite; break;
-                case "ui_accent": accentTemplate = sprite; break;
+                case "ui_panel": panelTemplate = image; break;
+                case "ui_scrim": scrimTemplate = image; break;
+                case "ui_button_primary": buttonTemplate = image.GetComponent<Button>(); break;
+                case "ui_accent": accentTemplate = image; break;
             }
         }
         if (GamePanel.Instance != null)
             labelTemplate = GamePanel.Instance.labTime;
     }
 
-    private UI2DSprite CreateSprite(Transform parent, string name, Vector3 position, int width, int height,
-        UI2DSprite template, Color color, bool collider, int depth)
+    private Image CreateSprite(Transform parent, string name, Vector3 position, int width, int height,
+        Image template, Color color, bool raycastTarget)
     {
-        GameObject go = NewObject(parent, name, position);
-        UI2DSprite sprite = go.AddComponent<UI2DSprite>();
-        CopyStyle(sprite, template);
-        sprite.type = UIBasicSprite.Type.Sliced;
-        sprite.width = width;
-        sprite.height = height;
-        sprite.color = color;
-        sprite.depth = depth;
-        if (collider)
-            go.AddComponent<BoxCollider>().size = new Vector3(width, height, 0.1f);
-        return sprite;
+        return UGUIRuntime.CreateImage(parent, name, position, width, height,
+            template, null, color, raycastTarget);
     }
 
-    private UILabel CreateLabel(Transform parent, string name, Vector3 position, int width, int height,
-        string text, int size, Color color, NGUIText.Alignment alignment)
+    private Text CreateLabel(Transform parent, string name, Vector3 position, int width, int height,
+        string text, int size, Color color, TextAnchor alignment)
     {
-        GameObject go = NewObject(parent, name, position);
-        UILabel label = go.AddComponent<UILabel>();
-        if (labelTemplate != null)
-        {
-            label.font = labelTemplate.font;
-            label.trueTypeFont = labelTemplate.trueTypeFont;
-            label.fontStyle = labelTemplate.fontStyle;
-            label.effectStyle = labelTemplate.effectStyle;
-            label.effectColor = labelTemplate.effectColor;
-            label.effectDistance = labelTemplate.effectDistance;
-        }
-        label.text = text;
-        label.width = width;
-        label.height = height;
-        label.fontSize = size;
-        label.color = color;
-        label.alignment = alignment;
-        label.depth = 40;
-        label.overflowMethod = UILabel.Overflow.ShrinkContent;
-        return label;
+        return UGUIRuntime.CreateText(parent, name, position, width, height,
+            text, size, color, alignment, labelTemplate);
     }
 
-    private UIButton CreateButton(Transform parent, string name, Vector3 position, int width, int height,
+    private Button CreateButton(Transform parent, string name, Vector3 position, int width, int height,
         string text, Color color)
     {
-        GameObject go = NewObject(parent, name, position);
-        UI2DSprite sprite = go.AddComponent<UI2DSprite>();
-        CopyStyle(sprite, buttonTemplate);
-        if (sprite.sprite2D == null)
-            sprite.sprite2D = FindLoadedSprite("ui_button_primary", "ui_button_secondary", "ui_input");
-        sprite.type = UIBasicSprite.Type.Sliced;
-        sprite.width = width;
-        sprite.height = height;
-        sprite.depth = 20;
-        go.AddComponent<BoxCollider>().size = new Vector3(width, height, 0.1f);
-        UIButton button = go.AddComponent<UIButton>();
-        button.tweenTarget = go;
-        button.hover = new Color(0.78f, 1f, 1f, 1f);
-        button.pressed = new Color(0.68f, 0.84f, 0.9f, 1f);
-        CreateLabel(go.transform, name + "Label", Vector3.zero, width - 20, height - 8,
-            text, 20, color, NGUIText.Alignment.Center);
+        return UGUIRuntime.CreateButton(parent, name, position, width, height,
+            text, color, buttonTemplate, labelTemplate);
+    }
+
+    private static CombatGraphic CreateSurface(Transform parent, string name, Vector3 position,
+        int width, int height, CombatGraphic.Shape shape, Color accent)
+    {
+        RectTransform rect = UGUIRuntime.CreateRect(parent, name, position, width, height);
+        CombatGraphic graphic = rect.gameObject.AddComponent<CombatGraphic>();
+        graphic.Configure(shape, accent);
+        graphic.raycastTarget = shape == CombatGraphic.Shape.Dialog;
+        return graphic;
+    }
+
+    private Button CreateActionButton(Transform parent, string name, Vector3 position, int width, int height,
+        string text, Color accent, bool danger)
+    {
+        CombatGraphic graphic = CreateSurface(parent, name, position, width, height,
+            danger ? CombatGraphic.Shape.DangerButton : CombatGraphic.Shape.Button, accent);
+        graphic.raycastTarget = true;
+        Button button = graphic.gameObject.AddComponent<Button>();
+        button.targetGraphic = graphic;
+        button.colors = new ColorBlock {
+            normalColor = Color.white, highlightedColor = new Color(1.18f, 1.18f, 1.18f),
+            pressedColor = new Color(0.7f, 0.82f, 0.86f), selectedColor = Color.white,
+            disabledColor = new Color(0.4f, 0.44f, 0.48f, 0.55f), colorMultiplier = 1f, fadeDuration = 0.08f
+        };
+        CreateLabel(graphic.transform, name + "Label", Vector3.zero, width - 24, height - 8,
+            text, 20, TextColor, TextAnchor.MiddleCenter);
+        resultButtons.Add(button);
         return button;
-    }
-
-    private static GameObject NewObject(Transform parent, string name, Vector3 position)
-    {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        go.transform.localPosition = position;
-        go.layer = parent.gameObject.layer;
-        return go;
-    }
-
-    private static void CopyStyle(UI2DSprite target, UI2DSprite source)
-    {
-        if (source == null)
-            return;
-        target.sprite2D = source.sprite2D;
-        target.shader = source.shader;
-        target.border = source.border;
     }
 
     private static Sprite FindLoadedSprite(params string[] names)

@@ -12,7 +12,9 @@ public static class ScorePanelPresenter
 
         panel.labTime.fontSize = 23;
         panel.labTime.fontStyle = UnityEngine.FontStyle.Normal;
-        panel.labTime.overflowMethod = UILabel.Overflow.ShrinkContent;
+        panel.labTime.resizeTextForBestFit = true;
+        panel.labTime.resizeTextMinSize = 12;
+        panel.labTime.resizeTextMaxSize = 23;
         panel.labTime.text = "最终分数：" + ScoreManager.Instance.TotalScore +
             "（原始 " + ScoreManager.Instance.RawScore + " × " + ScoreManager.Instance.ScoreRate.ToString("0.00") + "）" +
             "\n生存：" + survivalText + "  难度：" + GameDataMgr.Instance.DifficultyName() +

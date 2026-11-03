@@ -10,6 +10,7 @@ using UnityEditor.TestTools;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using UnityEngine.UI;
 
 public class LevelEncounterRuntimeTests
 {
@@ -59,7 +60,7 @@ public class LevelEncounterRuntimeTests
 
             Assert.IsTrue(encounter.HasWarning, "Missing warning in level " + levelId);
             Assert.IsTrue(encounter.GetComponentsInChildren<LineRenderer>().Any(line => line.enabled));
-            UILabel hud = GameObject.Find("labEncounter").GetComponent<UILabel>();
+            Text hud = GameObject.Find("labEncounter").GetComponent<Text>();
             StringAssert.Contains(titles[levelId - 1], hud.text);
             Assert.Greater(hud.fontSize, 14);
             CaptureIfRequested("Level" + levelId + "Warning.png");
@@ -459,9 +460,9 @@ public class LevelEncounterRuntimeTests
             Assert.IsNotNull(GameObject.Find("CampaignMissionResult"));
             GameObject statistics = GameObject.Find("MissionResultMechanics");
             Assert.IsNotNull(statistics);
-            StringAssert.Contains("反弹 " + target, statistics.GetComponent<UILabel>().text);
-            StringAssert.Contains("机制奖励", statistics.GetComponent<UILabel>().text);
-            StringAssert.Contains("零受击", GameObject.Find("MissionResultChallenges").GetComponent<UILabel>().text);
+            StringAssert.Contains("反弹 " + target, statistics.GetComponent<Text>().text);
+            StringAssert.Contains("机制奖励", statistics.GetComponent<Text>().text);
+            StringAssert.Contains("零受击", GameObject.Find("MissionResultChallenges").GetComponent<Text>().text);
             Assert.IsNull(GameObject.Find("MissionNextButton"));
             GameDataMgr.Instance.AddRank("CampaignMustNotRank", 110);
             Assert.AreEqual(rankCount, GameDataMgr.Instance.rankData.ranks.Count);
@@ -529,12 +530,11 @@ public class LevelEncounterRuntimeTests
                 {
                     camera.targetTexture = target;
                     camera.aspect = 16f / 9f;
-                    NGUIAspectSafeLayout layout = UnityEngine.Object.FindObjectOfType<NGUIAspectSafeLayout>();
+                    UGUIAspectSafeLayout layout = UnityEngine.Object.FindObjectOfType<UGUIAspectSafeLayout>();
                     if (layout != null && layout.UiCamera == camera)
                     {
                         layout.Apply();
-                        foreach (UIPanel panel in UnityEngine.Object.FindObjectsOfType<UIPanel>())
-                            panel.Refresh();
+                        Canvas.ForceUpdateCanvases();
                     }
                     camera.Render();
                 }

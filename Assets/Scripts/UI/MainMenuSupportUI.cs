@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 public enum MenuNavigationTarget
 {
@@ -19,7 +20,7 @@ public class MainMenuSupportUI : MonoBehaviour
     private static MainMenuSupportUI instance;
     private GameObject helpEntry;
     private GameObject viewRoot;
-    private UILabel templateLabel;
+    private Text templateLabel;
 
     private static readonly Color PanelColor = new Color(0.015f, 0.055f, 0.09f, 0.99f);
     private static readonly Color TextColor = new Color(0.91f, 0.96f, 1f, 1f);
@@ -96,21 +97,12 @@ public class MainMenuSupportUI : MonoBehaviour
         BuildModal("玩法说明", "五关机制、难度、挑战与联网流程", 1320, 850);
         if (viewRoot == null)
             return;
-        CreateLabel(viewRoot.transform, "HelpBody", new Vector3(0f, 30f, 0f), 1140, 590,
-            "[第一关 · 边境巡航] 跟随移动缺口；普通难度前段只教学单一规则。\n" +
-            "[第二关 · 弹幕清扫] 只点击青色发光核心；误点诱饵会触发分裂。\n" +
-            "[第三关 · 追踪压制] 等锁定线固定后换位；提前移动不算完美闪避。\n" +
-            "[第四关 · 信标接力] 中央取能后送往橙色信标；携能受击会损失能量。\n" +
-            "[第五关 · 星环风暴] 点击金色核心反击；破盾后进入狂暴并获得1.5秒保护。\n\n" +
-            "难度：简单提示更明显；普通后段加入组合攻击；困难加入假预警、反向横扫、双核心等机制。\n" +
-            "挑战：零受击、关卡专属零失误、全程不断连击。无尽每12秒一波，后期组合升级并检测固定安全点。\n" +
-            "操作：WASD/左摇杆移动，E/手柄A护盾，Q/手柄B技能，鼠标点击核心，Esc暂停。\n" +
-            "联网：选择公网房间，房主创建6位房间码，对方可在不同网络输入同一码；双方准备后先选角色。\n\n" +
-            "计分：原始分 = 生存秒数×10 + 手动清除×25 + Boss奖励 + 机制奖励。\n" +
-            "Boss奖励 = 1000×已完成轮数×(轮数+1)÷2；机制奖励：穿越100、连锁120、闪避150、信标250、反弹200。\n" +
-            "最终分 = 原始分×难度倍率（简单1.00、普通1.25、困难1.60，四舍五入）。受击/误点会中断连击，但不直接扣除已得分。",
-            18, TextColor, NGUIText.Alignment.Left);
+        CreateHelpSection("HelpSectionStages", new Vector3(-292f, 105f, 0f), "关卡机制", "01  边境巡航  ·  跟随移动缺口\n02  弹幕清扫  ·  识别青色核心\n03  追踪压制  ·  锁定后再换位\n04  信标接力  ·  取能并送往信标\n05  星环风暴  ·  破盾后反击");
+        CreateHelpSection("HelpSectionControl", new Vector3(292f, 105f, 0f), "飞行控制", "WASD / 左摇杆  移动\nE / 手柄 A  启动护盾\nQ / 手柄 B  释放技能\n鼠标  点击战术核心\nEsc  暂停任务");
+        CreateHelpSection("HelpSectionChallenge", new Vector3(-292f, -132f, 0f), "难度与挑战", "简单  明确预警与单一招式\n普通  后段加入组合攻击\n困难  假预警、反向横扫、双核心\n挑战  零受击 / 零失误 / 不断连击\n无尽  每 12 秒升级一波");
+        CreateHelpSection("HelpSectionScore", new Vector3(292f, -132f, 0f), "计分与联网", "基础分  生存、清除与机制奖励\n难度倍率  1.00 / 1.25 / 1.60\n受击或误点会中断连击\n公网房间使用 6 位房间码\n双方准备后进入战机选择");
         CreateCloseButton("关闭说明", -360f);
+        UGUIVisualSystem.RefreshNow();
     }
 
     private void BuildEntries()
@@ -118,7 +110,7 @@ public class MainMenuSupportUI : MonoBehaviour
         BeginPanel menu = BeginPanel.Instance;
         if (menu == null || helpEntry != null)
             return;
-        templateLabel = menu.btnBegin.GetComponentInChildren<UILabel>(true);
+        templateLabel = UGUIRuntime.Label(menu.btnBegin);
         helpEntry = CloneMenuButton(menu, "HelpEntryButton", new Vector3(625f, 43f, 0f), "玩法说明", OpenHelp);
         LayoutMenuButtons();
     }
@@ -130,135 +122,98 @@ public class MainMenuSupportUI : MonoBehaviour
             return;
         SetPosition(menu.btnBegin, 215f);
         GameObject network = GameObject.Find("NetworkBattleEntryButton");
-        if (network != null && network.transform.parent == menu.transform)
-            network.transform.localPosition = new Vector3(625f, 129f, 0f);
+        if (network != null)
+            UGUIRuntime.SetPosition(network.transform, new Vector3(625f, 129f, 0f));
         if (helpEntry != null)
-            helpEntry.transform.localPosition = new Vector3(625f, 43f, 0f);
+            UGUIRuntime.SetPosition(helpEntry.transform, new Vector3(625f, 43f, 0f));
         SetPosition(menu.btnRank, -43f);
         SetPosition(menu.btnSetting, -129f);
         SetPosition(menu.btnQuit, -215f);
     }
 
-    private static void SetPosition(UIButton button, float y)
+    private static void SetPosition(Button button, float y)
     {
         if (button != null)
-            button.transform.localPosition = new Vector3(625f, y, 0f);
+            UGUIRuntime.SetPosition(UGUIRuntime.ControlRoot(button).transform, new Vector3(625f, y, 0f));
     }
 
-    private GameObject CloneMenuButton(BeginPanel menu, string name, Vector3 position, string text, EventDelegate.Callback callback)
+    private GameObject CloneMenuButton(BeginPanel menu, string name, Vector3 position, string text, UnityEngine.Events.UnityAction callback)
     {
-        GameObject go = Instantiate(menu.btnBegin.gameObject, menu.transform, false);
+        GameObject go = Instantiate(UGUIRuntime.ControlRoot(menu.btnBegin), UGUIRuntime.View(menu), false);
         go.name = name;
-        go.transform.localPosition = position;
-        UIButton button = go.GetComponent<UIButton>();
+        UGUIRuntime.SetPosition(go.transform, position);
+        Button button = go.GetComponentInChildren<Button>(true);
         SetButtonText(button, text);
-        button.onClick.Clear();
-        button.onClick.Add(new EventDelegate(callback));
+        button.onClick.RemoveAllListeners();
+        button.onClick.AddListener(callback);
         return go;
     }
 
     private void BuildModal(string title, string subtitle, int width, int height)
     {
-        UIRoot root = FindObjectOfType<UIRoot>();
-        if (root == null)
+        Transform parent = UGUIRuntime.Root;
+        if (parent == null)
             return;
-        viewRoot = new GameObject("SupportModal");
-        viewRoot.transform.SetParent(root.transform, false);
-        viewRoot.layer = root.gameObject.layer;
-        viewRoot.AddComponent<UIPanel>().depth = 95;
-        CreateSprite(viewRoot.transform, "Scrim", Vector3.zero, 4000, 2400, FindSprite("ui_scrim"), new Color(0f, 0f, 0f, 0.82f), -100, true);
-        CreateSprite(viewRoot.transform, "Panel", Vector3.zero, width, height, FindSprite("ui_panel"), PanelColor, -50, true);
-        CreateSprite(viewRoot.transform, "Accent", new Vector3(0f, height * 0.5f - 72f, 0f), width - 180, 4, FindSprite("ui_accent"), AccentColor, -10, false);
+        UGUIRuntime.EnsureEventSystem();
+        viewRoot = UGUIRuntime.CreateRect(parent, "SupportModal", Vector3.zero, 1920, 1080).gameObject;
+        CreateSprite(viewRoot.transform, "Scrim", Vector3.zero, 4000, 2400, FindSprite("ui_scrim"), new Color(0f, 0.012f, 0.022f, 0.50f), true);
+        CreateSprite(viewRoot.transform, "SupportPanel", Vector3.zero, width, height, FindSprite("ui_panel"), PanelColor, true);
+        CreateSprite(viewRoot.transform, "Accent", new Vector3(0f, height * 0.5f - 72f, 0f), width - 180, 4, FindSprite("ui_accent"), AccentColor, false);
         CreateLabel(viewRoot.transform, "Title", new Vector3(0f, height * 0.5f - 125f, 0f), width - 160, 54,
-            title, 34, TextColor, NGUIText.Alignment.Center);
+            title, 34, TextColor, TextAnchor.MiddleCenter);
         CreateLabel(viewRoot.transform, "Subtitle", new Vector3(0f, height * 0.5f - 170f, 0f), width - 160, 32,
-            subtitle, 16, MutedColor, NGUIText.Alignment.Center);
+            subtitle, 16, MutedColor, TextAnchor.MiddleCenter);
+    }
+
+    private void CreateHelpSection(string name, Vector3 position, string title, string body)
+    {
+        Image panel = CreateSprite(viewRoot.transform, name, position, 540, 202, FindSprite("ui_panel_soft"),
+            new Color(0.012f, 0.055f, 0.075f, 0.94f), false);
+        CreateLabel(panel.transform, "SectionTitle", new Vector3(0f, 70f, 0f), 460, 34,
+            title, 22, AccentColor, TextAnchor.MiddleLeft);
+        CreateLabel(panel.transform, "SectionBody", new Vector3(0f, -18f, 0f), 460, 132,
+            body, 16, TextColor, TextAnchor.MiddleLeft);
     }
 
     private void CreateCloseButton(string text, float y)
     {
-        UIButton close = CreateButton("Close", new Vector3(0f, y, 0f), 320, 60, text, AccentColor);
-        close.onClick.Add(new EventDelegate(DestroyView));
+        Button close = CreateButton("Close", new Vector3(0f, y, 0f), 320, 60, text, AccentColor);
+        close.onClick.AddListener(DestroyView);
     }
 
-    private UIButton CreateButton(string name, Vector3 position, int width, int height, string text, Color color)
+    private Button CreateButton(string name, Vector3 position, int width, int height, string text, Color color)
     {
-        GameObject source = BeginPanel.Instance != null ? BeginPanel.Instance.btnBegin.gameObject : null;
+        GameObject source = BeginPanel.Instance != null ? UGUIRuntime.ControlRoot(BeginPanel.Instance.btnBegin) : null;
         if (source == null)
             return null;
         GameObject go = Instantiate(source, viewRoot.transform, false);
         go.name = name;
-        go.transform.localPosition = position;
+        UGUIRuntime.SetPosition(go.transform, position);
         go.transform.localScale = Vector3.one;
-        UI2DSprite background = go.GetComponent<UI2DSprite>();
-        if (background != null)
-        {
-            background.width = width;
-            background.height = height;
-        }
-        BoxCollider collider = go.GetComponent<BoxCollider>();
-        if (collider != null)
-            collider.size = new Vector3(width, height, 0.1f);
-        UIButton button = go.GetComponent<UIButton>();
-        button.onClick.Clear();
-        UILabel label = go.GetComponentInChildren<UILabel>(true);
+        UGUIRuntime.SetSize(go.transform, width, height);
+        Button button = go.GetComponentInChildren<Button>(true);
+        button.onClick.RemoveAllListeners();
+        Text label = UGUIRuntime.Label(button);
         if (label != null)
         {
             label.text = text;
             label.color = color;
-            label.width = width - 24;
-            label.height = height - 8;
-            label.overflowMethod = UILabel.Overflow.ShrinkContent;
+            label.rectTransform.sizeDelta = new Vector2(width - 24, height - 8);
+            label.resizeTextForBestFit = true;
         }
         return button;
     }
 
-    private UILabel CreateLabel(Transform parent, string name, Vector3 position, int width, int height,
-        string text, int size, Color color, NGUIText.Alignment alignment)
+    private Text CreateLabel(Transform parent, string name, Vector3 position, int width, int height,
+        string text, int size, Color color, TextAnchor alignment)
     {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        go.transform.localPosition = position;
-        go.layer = parent.gameObject.layer;
-        UILabel label = go.AddComponent<UILabel>();
-        if (templateLabel != null)
-        {
-            label.font = templateLabel.font;
-            label.trueTypeFont = templateLabel.trueTypeFont;
-            label.fontStyle = templateLabel.fontStyle;
-            label.effectStyle = templateLabel.effectStyle;
-            label.effectColor = templateLabel.effectColor;
-        }
-        if (label.font == null && label.trueTypeFont == null)
-            label.trueTypeFont = ChineseFontFallback.Font;
-        label.text = text;
-        label.width = width;
-        label.height = height;
-        label.fontSize = size;
-        label.color = color;
-        label.alignment = alignment;
-        label.overflowMethod = UILabel.Overflow.ShrinkContent;
-        label.depth = 40;
-        return label;
+        return UGUIRuntime.CreateText(parent, name, position, width, height, text, size, color, alignment, templateLabel);
     }
 
-    private static UI2DSprite CreateSprite(Transform parent, string name, Vector3 position, int width, int height,
-        Sprite spriteAsset, Color color, int depth, bool collider)
+    private static Image CreateSprite(Transform parent, string name, Vector3 position, int width, int height,
+        Sprite spriteAsset, Color color, bool raycastTarget)
     {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        go.transform.localPosition = position;
-        go.layer = parent.gameObject.layer;
-        UI2DSprite sprite = go.AddComponent<UI2DSprite>();
-        sprite.sprite2D = spriteAsset;
-        sprite.type = UIBasicSprite.Type.Sliced;
-        sprite.width = width;
-        sprite.height = height;
-        sprite.color = color;
-        sprite.depth = depth;
-        if (collider)
-            go.AddComponent<BoxCollider>().size = new Vector3(width, height, 0.1f);
-        return sprite;
+        return UGUIRuntime.CreateImage(parent, name, position, width, height, null, spriteAsset, color, raycastTarget);
     }
 
     private void DestroyView()
@@ -271,11 +226,11 @@ public class MainMenuSupportUI : MonoBehaviour
         viewRoot = null;
     }
 
-    private static void SetButtonText(UIButton button, string text)
+    private static void SetButtonText(Button button, string text)
     {
         if (button == null)
             return;
-        UILabel label = button.GetComponentInChildren<UILabel>(true);
+        Text label = UGUIRuntime.Label(button);
         if (label != null)
             label.text = text;
     }

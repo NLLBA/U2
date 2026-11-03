@@ -23,6 +23,7 @@ public abstract class BasePanel<T> : MonoBehaviour where T : class
     public virtual void Showme()
     {
         gameObject.SetActive(true);
+        UGUIVisualSystem.PresentPanel(this, UGUIRuntime.View(this).gameObject);
     }
 
     public virtual void Hideme()
